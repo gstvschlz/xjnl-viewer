@@ -78,10 +78,10 @@
   .acts button { border: 0; background: none; padding: 0 5px; color: var(--dim); }
   .acts button:hover { color: var(--fg); }
 
-  textarea, .bh input { background: transparent; border: 1px solid transparent; border-radius: 4px; padding: 2px 6px; field-sizing: content; resize: none; }
-  textarea:hover, .bh input:hover { border-color: var(--line); }
-  textarea:focus, .bh input:focus { outline: none; border-color: var(--dim); background: var(--panel); }
-  .bh input { min-width: 3ch; max-width: 70ch; font-family: ui-monospace, Consolas, monospace; font-size: 12px; background: var(--sunk); }
+  textarea, .bh input, .mid input { background: transparent; border: 1px solid transparent; border-radius: 4px; padding: 2px 6px; field-sizing: content; resize: none; }
+  textarea:hover, .bh input:hover, .mid input:hover { border-color: var(--line); }
+  textarea:focus, .bh input:focus, .mid input:focus { outline: none; border-color: var(--dim); background: var(--panel); }
+  .bh input, .mid input { min-width: 3ch; max-width: 70ch; font-family: ui-monospace, Consolas, monospace; font-size: 12px; background: var(--sunk); }
 
   .note { padding-left: 12px; border-left: 3px solid var(--note); }
   .note.xml { border-left-style: dashed; border-left-color: var(--faint); }
@@ -108,13 +108,24 @@
   .pg > .bb { margin-left: 7px; padding-left: 14px; border-left: 1px solid var(--line); }
   .pk { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: var(--dim); }
   .pg > .bh .pk { color: var(--fg); font-weight: 600; }
-  .prow { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; padding: 1px 0 1px 22px; }
-  .prow > .pk { min-width: 16ch; }
+  /* one grid for every row: key | value | auto. The key column shrinks by one indent
+     (22px) per level, so values line up at the same x at any depth */
+  :root { --key: 280px; }
+  .prow { display: grid; grid-template-columns: calc(var(--key) - var(--d, 0) * 22px) minmax(0, 1fr) 52px; gap: 8px; align-items: center; padding: 1px 0 1px 22px; }
+  .prow > .pk { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pg > .bh { display: grid; grid-template-columns: 16px calc(var(--key) - var(--d, 0) * 22px + 6px - 16px - 8px) minmax(0, 1fr) 52px; gap: 8px; }
   .prow:hover { background: var(--sunk); }
-  textarea.v { min-width: 10ch; max-width: 100%; background: var(--sunk); border-color: var(--line); padding: 1px 6px; }
+  textarea.v { width: 100%; min-width: 0; background: var(--sunk); border-color: var(--line); padding: 1px 6px; }
   textarea.v:placeholder-shown { border-style: dashed; }
   .sub { font-size: 11px; color: var(--faint); margin-right: 3px; }
-  .field { display: inline-flex; align-items: center; }
+  .mid { display: flex; gap: 6px; align-items: center; min-width: 0; }
+  .mid > textarea, .mid > .fields { flex: 1; min-width: 0; }
+  .fields { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 8px; }
+  /* compound fields carry their label inside the box, so each box starts on the column */
+  .field { display: flex; align-items: center; min-width: 0; background: var(--sunk); border: 1px solid var(--line); border-radius: 4px; padding-left: 6px; }
+  .field .sub { flex: none; margin-right: 2px; }
+  .field textarea.v { border: 0; background: transparent; }
+  .stmt .bh > input:first-of-type { width: 24ch; }
   .auto { font-size: 11px; color: var(--faint); display: inline-flex; gap: 3px; align-items: center; }
   .expr { color: var(--expr); }
   .hit, .hit textarea.v { background: var(--hit) !important; }
@@ -135,7 +146,8 @@
     aside { width: auto; max-height: 28vh; border-right: 0; border-bottom: 1px solid var(--line); }
     main { grid-column: 1; padding: 0 12px 40vh; }
     #q { width: 100%; }
-    .prow > .pk { min-width: 0; }
+    :root { --key: 130px; }
+    .fields { grid-template-columns: minmax(0, 1fr); }
   }
 </style>
 </head>
@@ -358,7 +370,7 @@ function stmt(n, parent) {
 function info(n) {
   const v = name => XJNL.elements(n).find(c => c.name === name);
   const line = ['application', 'date'].map(v).filter(Boolean).map(c => XJNL.text(c)).join(' · ');
-  return collapsible(n, 'info', [kw('info'), h('span', { className: 'dim', textContent: line })], () => params(n, ''), false);
+  return collapsible(n, 'info', [kw('info'), h('span', { className: 'dim', textContent: line })], () => params(n, '', 0), false);
 }
 
 // ---- tasks: the parameter tree ------------------------------------------
@@ -367,31 +379,43 @@ const leaf = e => !XJNL.elements(e).length;
 const hits = (e, q) => has(label(e), q) || e.attrs.some(a => has(a.value, q)) || (leaf(e) ? has(XJNL.text(e), q) : XJNL.elements(e).some(c => hits(c, q)));
 
 function value(e) {
-  return textBox(() => XJNL.text(e), v => XJNL.setText(e, v, cur.doc.eol), 'v');
+  const t = textBox(() => XJNL.text(e), v => XJNL.setText(e, v, cur.doc.eol), 'v');
+  t.placeholder = ' ';
+  return t;
 }
 
 // param attributes: automatic="yes|no" as a checkbox, a param-level loop as "↻ foreach v in arr", anything else as name + input
+// split in two: loop/other attributes go in the value column, the auto checkbox in its own
 function extras(e) {
   const out = [];
   const auto = XJNL.attr(e, 'automatic');
   if (XJNL.attr(e, 'repeat')) out.push(h('span', { className: 'chip' }, '↻ ', XJNL.attr(e, 'repeat').value, ' ', attrInput(e, 'element'), ' in ', attrInput(e, 'array')));
   out.push(otherAttrs(e, ['key', 'automatic', 'repeat', 'element', 'array']));
-  if (auto) out.push(h('label', { className: 'auto', title: 'automatic="yes": o Isatis calcula este valor' },
-    h('input', { type: 'checkbox', checked: auto.value === 'yes', onchange: ev => { XJNL.setAttr(e, 'automatic', ev.target.checked ? 'yes' : 'no'); changed(); } }), 'auto'));
-  return out;
+  return [out.flat(), auto && h('label', { className: 'auto', title: 'automatic="yes": o Isatis calcula este valor' },
+    h('input', { type: 'checkbox', checked: auto.value === 'yes', onchange: ev => { XJNL.setAttr(e, 'automatic', ev.target.checked ? 'yes' : 'no'); changed(); } }), 'auto')];
 }
 
-function params(parent, q) {
-  return XJNL.elements(parent).filter(e => !q || hits(e, q)).map(e => param(e, q));
+function params(parent, q, d) {
+  return XJNL.elements(parent).filter(e => !q || hits(e, q)).map(e => param(e, q, d));
 }
 
-function param(e, q) {
+function param(e, q, d) {
   const kids = XJNL.elements(e), key = h('span', { className: 'pk', textContent: label(e) });
-  if (!kids.length) return h('div', { className: 'prow' }, key, value(e), extras(e));
+  key.title = label(e);
+  const [mid, auto] = extras(e);
+  const row = v => h('div', { className: 'prow', style: '--d:' + d }, key, mid.length ? h('div', { className: 'mid' }, mid, v) : v, h('span', {}, auto));
+  if (!kids.length) return row(value(e));
   // a node whose children are plain fields (ROOT: path/file/table, VARIABLE: ...) reads best on one line
+  if (kids.length === 1 && leaf(kids[0]) && kids[0].name !== 'param') {
+    key.textContent = label(e) + ' › ' + kids[0].name;
+    key.title = key.textContent;
+    return row(value(kids[0]));
+  }
   if (kids.every(c => leaf(c) && c.name !== 'param'))
-    return h('div', { className: 'prow' }, key, kids.map(c => h('span', { className: 'field' }, h('span', { className: 'sub', textContent: c.name }), value(c))), extras(e));
-  return collapsible(e, 'pg', [key, extras(e)], () => params(e, q), true, !!q);
+    return row(h('div', { className: 'fields', style: '--n:' + kids.length }, kids.map(c => h('span', { className: 'field' }, h('span', { className: 'sub', textContent: c.name }), value(c)))));
+  const g = collapsible(e, 'pg', [key, h('span', { className: 'mid' }, mid), h('span', {}, auto)], () => params(e, q, d + 1), true, !!q);
+  g.style.setProperty('--d', d);
+  return g;
 }
 
 function task(n, parent) {
@@ -404,7 +428,7 @@ function task(n, parent) {
     [h('span', { className: 'tid', textContent: XJNL.attr(n, 'id')?.value ?? 'task' }),
      XJNL.attr(n, 'version') && h('span', { className: 'chip', textContent: 'v' + XJNL.attr(n, 'version').value }),
      offChip(n), h('span', { className: 'sum', textContent: sum, title: sum }), actions(n, parent)],
-    () => params(n, hit && q && !has(XJNL.attr(n, 'id')?.value || '', q) ? q : ''), false, !!q && hit);
+    () => params(n, hit && q && !has(XJNL.attr(n, 'id')?.value || '', q) ? q : '', 0), false, !!q && hit);
   return box;
 }
 

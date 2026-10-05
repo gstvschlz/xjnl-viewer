@@ -311,10 +311,10 @@ function collapsible(n, cls, head, body, def, force) {
   const box = h('div', { className: `blk collapsible ${cls}` + (off(n) ? ' off' : '') });
   const bd = h('div', { className: 'bb' });
   let built = false;
-  const set = v => { n._open = v; box.classList.toggle('shut', !v); if (v && !built) { built = true; bd.append(...[body()].flat(Infinity).filter(Boolean)); } };
+  const set = (v, keep = true) => { if (keep) n._open = v; box.classList.toggle('shut', !v); if (v && !built) { built = true; bd.append(...[body()].flat(Infinity).filter(Boolean)); } };
   const hd = h('div', { className: 'bh', onclick: e => { if (!e.target.closest('input, textarea, .acts, label')) set(box.classList.contains('shut')); } }, h('button', { className: 'chev', title: 'Expandir/recolher' }), head);
   box.append(hd, bd);
-  set(force || (n._open ?? def));
+  set(force || (n._open ?? def), !force); // a search opens blocks without changing what you opened
   return box;
 }
 

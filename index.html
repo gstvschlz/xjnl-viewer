@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>xjnl viewer</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗒️</text></svg>">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/theme/material-darker.min.css">
 <style>
   :root { --bg: #fafaf9; --panel: #fff; --fg: #1c1917; --dim: #78716c; --line: #e7e5e4; --accent: #0f766e; --expr: #9333ea; --hit: #fde68a; --off: #a8a29e; color-scheme: light; }
   @media (prefers-color-scheme: dark) {
@@ -53,6 +55,8 @@
   td input { width: 100%; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
   .expr { color: var(--expr); }
   .hit, tr.hit td.path { background: var(--hit); }
+  .CodeMirror { height: auto; border: 1px solid var(--line); border-radius: 3px; font: 12px/1.4 ui-monospace, Consolas, monospace; margin-bottom: 4px; }
+  .pyerr { background: rgba(220, 38, 38, .22); }
   @media (max-width: 700px) { body { grid-template: auto auto 1fr / 1fr; } aside { max-height: 30vh; border-right: 0; border-bottom: 1px solid var(--line); } }
 </style>
 </head>
@@ -75,6 +79,8 @@
 <aside id="files"></aside>
 <main id="journal"><p class="empty">Abra uma pasta de batches (por exemplo <code>…/Isatis.neo-mining/&lt;projeto&gt;/batch</code>) ou um arquivo <code>.xjnl</code>. Os arquivos são lidos e gravados localmente pelo navegador; nada é enviado a lugar nenhum.</p></main>
 <input type="file" id="picker" accept=".xjnl" hidden>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/mode/python/python.min.js"></script>
 <script src="xjnl.js"></script>
 <script>
 const $ = id => document.getElementById(id);
@@ -210,16 +216,62 @@ function block(n, parent) {
   }
   if (n.name === 'python') {
     const first = XJNL.text(n).split('\n').map(s => s.trim()).find(Boolean) || '';
-    const q = query(), d = h('details', { className: 'block' + off, open: !!n._open || (!!q && XJNL.text(n).toLowerCase().includes(q)), ontoggle: () => n._open = d.open },
+    const q = query(), ed = pyEditor(n);
+    const d = h('details', { className: 'block' + off, open: !!n._open || (!!q && XJNL.text(n).toLowerCase().includes(q)), ontoggle: () => { n._open = d.open; d.open && ed.mount(); } },
       h('summary', {}, h('span', { className: 'head', style: 'display:inline-flex;width:calc(100% - 1em)' }, h('span', { className: 'tag', textContent: 'python' }),
         h('span', { className: 'attr', textContent: first }), actions(n, parent))),
-      textArea(() => XJNL.text(n), v => XJNL.setText(n, v, cur.doc.eol)));
+      ed);
     return d;
   }
   const showText = XJNL.text(n) !== '' || !n.attrs.length;
   return h('div', { className: 'block' + off },
     h('div', { className: 'head' }, h('span', { className: 'tag', textContent: n.name }), attrInputs(n), actions(n, parent)),
     showText && textArea(() => XJNL.text(n), v => XJNL.setText(n, v, cur.doc.eol)));
+}
+
+// python: CodeMirror (mounted on first open, plain textarea if the CDN is unreachable)
+// and a syntax check with Pyodide on the Python Isatis embeds (3.11), loaded on first use
+const PYODIDE = 'https://cdn.jsdelivr.net/pyodide/v0.25.1/full/';
+const EXPR = /\$\((?:[^()]|\([^()]*\))*\)/g; // batch $(...) substitutions -> a plain name
+const CHECK = `
+def _chk(s):
+    try:
+        compile(s, '<python>', 'exec')
+        return ''
+    except SyntaxError as e:
+        return f'{e.lineno or 0}\\t{e.msg}'
+_chk(src)`;
+let pyodide = null;
+function pyCheck(code) {
+  pyodide ??= new Promise((ok, fail) => document.head.append(h('script', { src: PYODIDE + 'pyodide.js', onerror: fail,
+    onload: () => loadPyodide({ indexURL: PYODIDE }).then(ok, fail) }))).catch(e => { pyodide = null; throw e; });
+  return pyodide.then(p => { p.globals.set('src', code.replace(EXPR, '_')); return p.runPython(CHECK); });
+}
+
+function pyEditor(n) {
+  const box = h('div'), res = h('span', { className: 'attr' });
+  let cm = null, ta = null, bad = null;
+  const mark = line => { if (!cm) return; if (bad != null) cm.removeLineClass(bad, 'background', 'pyerr'); bad = line; if (line != null) cm.addLineClass(line, 'background', 'pyerr'); };
+  const validate = async () => {
+    res.textContent = pyodide ? 'validando…' : 'carregando Python 3.11 (~10 MB na primeira vez)…';
+    try {
+      const out = await pyCheck(cm ? cm.getValue() : XJNL.text(n));
+      if (!out) { res.textContent = '✓ sintaxe OK (Python 3.11)'; mark(null); return; }
+      const [line, msg] = out.split('\t');
+      res.textContent = `✗ linha ${line}: ${msg}`;
+      mark(+line > 0 ? +line - 1 : null);
+      cm && +line > 0 && cm.scrollIntoView({ line: +line - 1, ch: 0 });
+    } catch (e) { res.textContent = 'não foi possível carregar o Pyodide: ' + e.message; }
+  };
+  const wrap = h('div', {}, box, h('div', { className: 'head' }, h('button', { textContent: 'Validar sintaxe', onclick: validate }), res));
+  wrap.mount = () => {
+    if (cm || ta) return;
+    if (!window.CodeMirror) return box.append(ta = textArea(() => XJNL.text(n), v => XJNL.setText(n, v, cur.doc.eol)));
+    cm = CodeMirror(box, { value: XJNL.text(n).replace(/\r\n/g, '\n'), mode: 'python', lineNumbers: true, indentUnit: 4, viewportMargin: Infinity,
+      theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'material-darker' : 'default' });
+    cm.on('change', () => { XJNL.setText(n, cm.getValue(), cur.doc.eol); changed(); mark(null); res.textContent = ''; });
+  };
+  return wrap;
 }
 
 // a task is a flat table: one row per leaf value, plus the param attributes

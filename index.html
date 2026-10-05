@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>xjnl viewer</title>
+<style>
+  :root { --bg: #fafaf9; --panel: #fff; --fg: #1c1917; --dim: #78716c; --line: #e7e5e4; --accent: #0f766e; --expr: #9333ea; --hit: #fde68a; --off: #a8a29e; color-scheme: light; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #161514; --panel: #1f1e1c; --fg: #e7e5e4; --dim: #a8a29e; --line: #333130; --accent: #2dd4bf; --expr: #c084fc; --hit: #854d0e; --off: #57534e; color-scheme: dark; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 13px/1.4 system-ui, sans-serif; background: var(--bg); color: var(--fg); display: grid; grid-template: auto 1fr / 280px 1fr; height: 100vh; }
+  header { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  header .name { font-weight: 600; margin: 0 6px; }
+  header .grow { flex: 1; }
+  #dirty { color: var(--accent); visibility: hidden; }
+  body.dirty #dirty { visibility: visible; }
+  #status { color: var(--dim); }
+  button, input, textarea { font: inherit; color: inherit; }
+  button { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 3px 8px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  input, textarea { background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 2px 5px; }
+  textarea { width: 100%; field-sizing: content; min-height: 1.6em; font-family: ui-monospace, Consolas, monospace; font-size: 12px; resize: vertical; }
+  aside { overflow: auto; border-right: 1px solid var(--line); padding: 6px 0; }
+  aside button { display: block; width: 100%; text-align: left; border: 0; border-radius: 0; background: none; padding: 3px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  aside button.dir { color: var(--dim); font-weight: 600; cursor: default; margin-top: 6px; }
+  aside button.cur { background: var(--line); }
+  main { overflow: auto; padding: 12px 16px 40vh; }
+  .empty { color: var(--dim); max-width: 560px; }
+  .block { border-left: 2px solid var(--line); margin: 6px 0; padding: 4px 0 4px 10px; }
+  .block.off { opacity: .45; }
+  .block.miss { opacity: .3; }
+  .head { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .tag { font-weight: 600; color: var(--accent); }
+  .head input { width: auto; field-sizing: content; min-width: 4em; max-width: 60ch; }
+  .attr { color: var(--dim); }
+  .acts { margin-left: auto; display: flex; gap: 2px; opacity: 0; }
+  .head:hover .acts, summary:hover .acts { opacity: 1; }
+  .acts button { padding: 0 6px; font-size: 12px; }
+  details > summary { cursor: pointer; list-style: none; }
+  details > summary::before { content: '▸'; color: var(--dim); display: inline-block; width: 1em; }
+  details[open] > summary::before { content: '▾'; }
+  .task { border-left-color: var(--accent); }
+  .task > summary { display: flex; gap: 8px; align-items: center; }
+  .task .sum { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+  .xml { color: var(--dim); font-style: italic; }
+  table { border-collapse: collapse; width: 100%; margin-top: 4px; }
+  td { padding: 1px 6px 1px 0; vertical-align: top; }
+  td.path { color: var(--dim); white-space: nowrap; width: 1%; max-width: 45vw; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; }
+  td.path b { color: var(--fg); font-weight: 500; }
+  td input { width: 100%; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+  .expr { color: var(--expr); }
+  .hit, tr.hit td.path { background: var(--hit); }
+  @media (max-width: 700px) { body { grid-template: auto auto 1fr / 1fr; } aside { max-height: 30vh; border-right: 0; border-bottom: 1px solid var(--line); } }
+</style>
+</head>
+<body>
+<header>
+  <button id="openDir" title="Abrir uma pasta de journals (Edge/Chrome)">Abrir pasta</button>
+  <button id="openFile">Abrir arquivo</button>
+  <span class="name" id="fname"></span><span id="dirty">● não salvo</span>
+  <button id="save" title="Ctrl+S">Salvar</button>
+  <button id="revert">Descartar</button>
+  <span class="grow"></span>
+  <input id="q" type="search" placeholder="Buscar">
+  <input id="r" placeholder="Substituir por">
+  <button id="replace">Substituir tudo</button>
+  <label><input type="checkbox" id="all"> mostrar tudo</label>
+  <span id="status"></span>
+</header>
+<aside id="files"></aside>
+<main id="journal"><p class="empty">Abra uma pasta de batches (por exemplo <code>…/Isatis.neo-mining/&lt;projeto&gt;/batch</code>) ou um arquivo <code>.xjnl</code>. Os arquivos são lidos e gravados localmente pelo navegador; nada é enviado a lugar nenhum.</p></main>
+<input type="file" id="picker" accept=".xjnl" hidden>
+<script src="xjnl.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const fsApi = 'showDirectoryPicker' in window;
+let files = [], cur = null; // cur: { path, handle, src, doc }
+
+function h(tag, props, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) k.startsWith('on') ? e.addEventListener(k.slice(2), v) : k in e ? e[k] = v : e.setAttribute(k, v);
+  e.append(...kids.flat().filter(k => k != null && k !== false));
+  return e;
+}
+const status = s => $('status').textContent = s;
+function setDirty(d) { document.body.classList.toggle('dirty', d); if (cur) cur.dirty = d; }
+const changed = () => setDirty(true);
+const query = () => $('q').value.trim().toLowerCase();
+
+// ---- files --------------------------------------------------------------
+async function walk(dir, prefix = '') {
+  for await (const [name, handle] of dir.entries()) {
+    if (handle.kind === 'directory') await walk(handle, prefix + name + '/');
+    else if (name.toLowerCase().endsWith('.xjnl')) files.push({ path: prefix + name, handle });
+  }
+}
+
+function renderFiles() {
+  let lastDir = null;
+  $('files').replaceChildren(...files.flatMap(f => {
+    const i = f.path.lastIndexOf('/'), dir = f.path.slice(0, i + 1), out = [];
+    if (dir !== lastDir) { lastDir = dir; if (dir) out.push(h('button', { className: 'dir', textContent: dir, tabIndex: -1 })); }
+    out.push(h('button', { textContent: f.path.slice(i + 1), title: f.path, className: cur && cur.path === f.path ? 'cur' : '', onclick: () => load(f) }));
+    return out;
+  }));
+}
+
+const discard = () => !(cur && cur.dirty) || confirm(`Descartar as alterações em ${cur.path}?`);
+
+async function load(f, file) {
+  if (!discard()) return;
+  const src = await (file || await f.handle.getFile()).text();
+  cur = { ...f, src };
+  $('fname').textContent = f.path;
+  document.title = f.path.split('/').pop() + ' · xjnl';
+  renderFiles();
+  reparse();
+}
+
+function reparse() {
+  setDirty(false);
+  try { cur.doc = XJNL.parse(cur.src); render(); status(''); }
+  catch (e) { cur.doc = null; $('journal').replaceChildren(h('p', { className: 'empty', textContent: 'Não foi possível ler o journal: ' + e.message })); }
+}
+
+async function save() {
+  if (!cur || !cur.doc) return;
+  const out = XJNL.serialize(cur.doc);
+  if (cur.handle && cur.handle.createWritable) {
+    const w = await cur.handle.createWritable(); await w.write(out); await w.close();
+  } else {
+    h('a', { href: URL.createObjectURL(new Blob([out], { type: 'application/xml' })), download: cur.path.split('/').pop() }).click();
+  }
+  cur.src = out; setDirty(false); status('salvo');
+}
+
+$('openDir').onclick = async () => {
+  if (!fsApi) return alert('Abrir pasta exige Edge ou Chrome. Use "Abrir arquivo".');
+  if (!discard()) return;
+  const dir = await window.showDirectoryPicker({ mode: 'readwrite' }).catch(() => null);
+  if (!dir) return;
+  files = []; cur = null; setDirty(false);
+  await walk(dir);
+  files.sort((a, b) => a.path.localeCompare(b.path, undefined, { numeric: true }));
+  renderFiles();
+  status(`${files.length} journals em ${dir.name}`);
+};
+$('openFile').onclick = async () => {
+  if (!('showOpenFilePicker' in window)) return $('picker').click();
+  const [handle] = await window.showOpenFilePicker({ types: [{ description: 'Isatis journal', accept: { 'application/xml': ['.xjnl'] } }] }).catch(() => []);
+  if (handle) load({ path: handle.name, handle });
+};
+$('picker').onchange = e => { const file = e.target.files[0]; if (file) load({ path: file.name }, file); e.target.value = ''; };
+$('save').onclick = save;
+$('revert').onclick = () => cur && cur.dirty && confirm('Descartar todas as alterações?') && reparse();
+addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); save(); } });
+addEventListener('beforeunload', e => { if (cur && cur.dirty) e.preventDefault(); });
+
+// ---- journal ------------------------------------------------------------
+function render() {
+  if (!cur || !cur.doc) return;
+  const root = XJNL.elements(cur.doc)[0];
+  $('journal').replaceChildren(...XJNL.blocks(root).map(n => block(n, root)));
+}
+
+function actions(n, parent) {
+  const act = (label, title, fn) => h('button', { textContent: label, title, onclick: e => { e.preventDefault(); e.stopPropagation(); fn(); changed(); render(); } });
+  return h('span', { className: 'acts' },
+    n.type === 'el' && act('⏻', 'Ativar/desativar (disabled="block")', () => XJNL.setAttr(n, 'disabled', XJNL.attr(n, 'disabled') ? null : 'block')),
+    act('↑', 'Mover para cima', () => XJNL.move(parent, n, -1)),
+    act('↓', 'Mover para baixo', () => XJNL.move(parent, n, 1)),
+    act('⧉', 'Duplicar', () => { XJNL.duplicate(parent, n); }),
+    act('✕', 'Apagar', () => XJNL.remove(parent, n)));
+}
+
+const hasExpr = (input) => input.classList.toggle('expr', input.value.includes('$('));
+
+function attrInputs(n, skip = []) {
+  return n.attrs.filter(a => !skip.includes(a.name) && a.name !== 'disabled').flatMap(a => [
+    h('span', { className: 'attr', textContent: a.name }),
+    h('input', { value: a.value, oninput: e => { XJNL.setAttr(n, a.name, e.target.value); hasExpr(e.target); changed(); } })]);
+}
+
+function textArea(get, set) {
+  const t = h('textarea', { value: get(), spellcheck: false, oninput: e => { set(e.target.value); changed(); } });
+  const q = query(); if (q && t.value.toLowerCase().includes(q)) t.classList.add('hit');
+  return t;
+}
+
+function block(n, parent) {
+  if (n.type === 'comment')
+    return h('div', { className: 'block' }, h('div', { className: 'head' }, h('span', { className: 'xml', textContent: '<!-- -->' }), actions(n, parent)),
+      textArea(() => XJNL.value(n), v => XJNL.setValue(n, v.replace(/\r?\n/g, cur.doc.eol))));
+  const off = XJNL.attr(n, 'disabled') ? ' off' : '';
+  if (n.name === 'task') return task(n, parent, off);
+  const kids = XJNL.elements(n);
+  if (kids.length) {
+    // inputs stay out of <summary>, where typing a space would toggle the block
+    const d = h('details', { className: 'block' + off, open: n._open ?? n.name !== 'info', ontoggle: () => n._open = d.open },
+      h('summary', {}, h('span', { className: 'head', style: 'display:inline-flex;width:calc(100% - 1em)' }, h('span', { className: 'tag', textContent: n.name }),
+        h('span', { className: 'attr', textContent: n.attrs.filter(a => a.name !== 'disabled').map(a => `${a.name}=${a.value}`).join('  ') }), actions(n, parent))),
+      n.attrs.some(a => a.name !== 'disabled') && h('div', { className: 'head' }, attrInputs(n)),
+      XJNL.blocks(n).map(c => block(c, n)));
+    return d;
+  }
+  const showText = XJNL.text(n) !== '' || !n.attrs.length;
+  return h('div', { className: 'block' + off },
+    h('div', { className: 'head' }, h('span', { className: 'tag', textContent: n.name }), attrInputs(n), actions(n, parent)),
+    showText && textArea(() => XJNL.text(n), v => XJNL.setText(n, v, cur.doc.eol)));
+}
+
+// a task is a flat table: one row per leaf value, plus the param attributes
+function rows(t) {
+  const out = [];
+  function walk(e, path) {
+    const p = [...path, XJNL.attr(e, 'key')?.value ?? e.name];
+    for (const a of e.attrs) if (a.name !== 'key') out.push({ path: [...p, '@' + a.name], get: () => a.value, set: v => XJNL.setAttr(e, a.name, v), quiet: a.name === 'automatic' });
+    const kids = XJNL.elements(e);
+    if (kids.length) kids.forEach(k => walk(k, p));
+    else out.push({ path: p, get: () => XJNL.text(e), set: v => XJNL.setText(e, v, cur.doc.eol) });
+  }
+  XJNL.elements(t).forEach(k => walk(k, []));
+  return out;
+}
+
+function task(n, parent, off) {
+  const all = rows(n), q = query();
+  const match = r => r.path.join(' ').toLowerCase().includes(q) || r.get().toLowerCase().includes(q);
+  const hit = !q || XJNL.attr(n, 'id')?.value.toLowerCase().includes(q) || all.some(match);
+  const sum = [...new Set(all.filter(r => !r.path.at(-1).startsWith('@')).map(r => r.get()).filter(Boolean))].slice(0, 3).join(' · ');
+  const body = h('table');
+  const fill = () => body.replaceChildren(...all
+    .filter(r => q ? match(r) : $('all').checked || (r.get() !== '' && !r.quiet))
+    .map(r => {
+      const input = h('input', { value: r.get(), oninput: e => { r.set(e.target.value); hasExpr(e.target); changed(); } });
+      hasExpr(input);
+      return h('tr', { className: q ? 'hit' : '' },
+        h('td', { className: 'path', title: r.path.join(' › ') }, h('bdi', {}, r.path.slice(0, -1).map(s => s + ' › ').join(''), h('b', { textContent: r.path.at(-1) }))),
+        h('td', {}, input));
+    }));
+  const d = h('details', { className: 'block task' + off + (hit ? '' : ' miss'), open: q ? hit : !!n._open, ontoggle: () => { n._open = d.open; if (d.open && !body.childNodes.length) fill(); } },
+    h('summary', {}, h('span', { className: 'tag', textContent: XJNL.attr(n, 'id')?.value ?? 'task' }),
+      XJNL.attr(n, 'version') && h('span', { className: 'attr', textContent: 'v' + XJNL.attr(n, 'version').value }),
+      h('span', { className: 'sum', textContent: sum, title: sum }), actions(n, parent)),
+    body);
+  if (d.open) fill();
+  return d;
+}
+
+$('q').oninput = render;
+$('all').onchange = render;
+$('replace').onclick = () => {
+  const q = $('q').value; if (!cur || !cur.doc || !q) return;
+  const n = XJNL.replaceAll(cur.doc, new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), $('r').value, cur.doc.eol);
+  if (n) changed();
+  status(`${n} substituições`);
+  render();
+};
+</script>
+</body>
+</html>

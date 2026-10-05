@@ -8,76 +8,151 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/theme/material-darker.min.css">
 <style>
-  :root { --bg: #fafaf9; --panel: #fff; --fg: #1c1917; --dim: #78716c; --line: #e7e5e4; --accent: #0f766e; --expr: #9333ea; --hit: #fde68a; --off: #a8a29e; color-scheme: light; }
+  :root {
+    --bg: #f6f5f3; --panel: #fff; --sunk: #f1efec; --fg: #1c1917; --dim: #78716c; --faint: #a8a29e; --line: #e4e1dd;
+    --task: #0f766e; --flow: #7c3aed; --note: #b45309; --py: #2563eb; --expr: #9333ea; --hit: #fde68a; --bad: #dc2626;
+    color-scheme: light;
+  }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #161514; --panel: #1f1e1c; --fg: #e7e5e4; --dim: #a8a29e; --line: #333130; --accent: #2dd4bf; --expr: #c084fc; --hit: #854d0e; --off: #57534e; color-scheme: dark; }
+    :root {
+      --bg: #141312; --panel: #1d1c1a; --sunk: #191817; --fg: #e7e5e4; --dim: #a8a29e; --faint: #6b6560; --line: #312e2b;
+      --task: #2dd4bf; --flow: #a78bfa; --note: #f59e0b; --py: #60a5fa; --expr: #c084fc; --hit: #713f12; --bad: #f87171;
+      color-scheme: dark;
+    }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; font: 13px/1.4 system-ui, sans-serif; background: var(--bg); color: var(--fg); display: grid; grid-template: auto 1fr / 280px 1fr; height: 100vh; }
-  header { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--panel); }
-  header .name { font-weight: 600; margin: 0 6px; }
-  header .grow { flex: 1; }
-  #dirty { color: var(--accent); visibility: hidden; }
-  body.dirty #dirty { visibility: visible; }
-  #status { color: var(--dim); }
+  body { margin: 0; font: 13px/1.45 system-ui, "Segoe UI", sans-serif; background: var(--bg); color: var(--fg); height: 100vh; display: grid; grid-template: auto 1fr / auto 1fr; }
   button, input, textarea { font: inherit; color: inherit; }
-  button { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 3px 8px; cursor: pointer; }
-  button:hover { border-color: var(--accent); }
-  input, textarea { background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 2px 5px; }
-  textarea { width: 100%; field-sizing: content; min-height: 1.6em; font-family: ui-monospace, Consolas, monospace; font-size: 12px; resize: vertical; }
-  aside { overflow: auto; border-right: 1px solid var(--line); padding: 6px 0; }
-  aside button { display: block; width: 100%; text-align: left; border: 0; border-radius: 0; background: none; padding: 3px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  aside button.dir { color: var(--dim); font-weight: 600; cursor: default; margin-top: 6px; }
-  aside button.cur { background: var(--line); }
-  main { overflow: auto; padding: 12px 16px 40vh; }
-  .empty { color: var(--dim); max-width: 560px; }
-  .block { border-left: 2px solid var(--line); margin: 6px 0; padding: 4px 0 4px 10px; }
-  .block.off { opacity: .45; }
-  .block.miss { opacity: .3; }
-  .head { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-  .tag { font-weight: 600; color: var(--accent); }
-  .head input { width: auto; field-sizing: content; min-width: 4em; max-width: 60ch; }
-  .attr { color: var(--dim); }
-  .acts { margin-left: auto; display: flex; gap: 2px; opacity: 0; }
-  .head:hover .acts, summary:hover .acts { opacity: 1; }
-  .acts button { padding: 0 6px; font-size: 12px; }
-  details > summary { cursor: pointer; list-style: none; }
-  details > summary::before { content: '▸'; color: var(--dim); display: inline-block; width: 1em; }
-  details[open] > summary::before { content: '▾'; }
-  .task { border-left-color: var(--accent); }
-  .task > summary { display: flex; gap: 8px; align-items: center; }
-  .task .sum { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
-  .xml { color: var(--dim); font-style: italic; }
-  table { border-collapse: collapse; width: 100%; margin-top: 4px; }
-  td { padding: 1px 6px 1px 0; vertical-align: top; }
-  td.path { color: var(--dim); white-space: nowrap; width: 1%; max-width: 45vw; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; }
-  td.path b { color: var(--fg); font-weight: 500; }
-  td input { width: 100%; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+  button { background: var(--panel); border: 1px solid var(--line); border-radius: 5px; padding: 3px 10px; cursor: pointer; }
+  button:hover { border-color: var(--dim); }
+  button.primary { background: var(--task); border-color: var(--task); color: var(--panel); font-weight: 600; }
+  .mono, textarea.v, .CodeMirror { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+
+  /* top bar: file on the left, search on the right */
+  header { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .brand { font-weight: 700; margin-right: 6px; }
+  .file { display: flex; flex-direction: column; min-width: 0; margin: 0 8px; }
+  #fname { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw; }
+  #state { font-size: 11px; color: var(--dim); }
+  body.dirty #state { color: var(--note); }
+  .grow { flex: 1; }
+  #q { width: 220px; }
+  header input { background: var(--sunk); border: 1px solid var(--line); border-radius: 5px; padding: 3px 8px; }
+  #replaceBar { display: none; gap: 6px; align-items: center; flex-basis: 100%; justify-content: flex-end; }
+  body.replacing #replaceBar { display: flex; }
+
+  aside { display: none; width: 270px; overflow: auto; border-right: 1px solid var(--line); background: var(--panel); padding: 8px 0; }
+  body.folder aside { display: block; }
+  aside h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--dim); margin: 4px 14px 8px; }
+  aside button { display: block; width: 100%; text-align: left; border: 0; border-radius: 0; background: none; padding: 3px 14px 3px 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  aside button.dir { color: var(--dim); font-size: 11px; font-weight: 600; padding-left: 14px; margin-top: 8px; cursor: default; }
+  aside button.cur { background: var(--sunk); box-shadow: inset 3px 0 var(--task); font-weight: 600; }
+
+  main { grid-column: 2; overflow: auto; padding: 0 24px 40vh; min-width: 0; }
+  #save, #revert { display: none; }
+  body.loaded #save, body.loaded #revert { display: inline-block; }
+  .bar { position: sticky; top: 0; z-index: 2; display: flex; gap: 8px; align-items: center; padding: 10px 0; background: var(--bg); border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+  .bar .count { color: var(--dim); margin-left: 8px; }
+  .welcome { max-width: 520px; margin: 12vh auto; text-align: center; color: var(--dim); }
+  .welcome h1 { color: var(--fg); font-size: 22px; margin-bottom: 4px; }
+  .welcome .btns { display: flex; gap: 8px; justify-content: center; margin: 20px 0; }
+  .legend { display: flex; gap: 14px; justify-content: center; font-size: 12px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+
+  /* journal blocks */
+  .blk { position: relative; margin: 6px 0; }
+  .bh { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: 26px; }
+  .collapsible > .bh { cursor: pointer; }
+  .chev { border: 0; background: none; padding: 0; width: 16px; color: var(--dim); }
+  .chev::before { content: '▾'; }
+  .shut > .bh .chev::before { content: '▸'; }
+  .shut > .bb { display: none; }
+  .kw { font-family: ui-monospace, Consolas, monospace; font-weight: 700; }
+  .dim { color: var(--dim); }
+  .chip { font-size: 11px; color: var(--dim); border: 1px solid var(--line); border-radius: 10px; padding: 0 7px; }
+  .chip.off { color: var(--bad); border-color: var(--bad); }
+  .off > .bh, .off > .bb, .off > textarea { opacity: .45; }
+  .miss { opacity: .3; }
+  .acts { margin-left: auto; display: flex; gap: 2px; opacity: .25; }
+  .blk:hover > .bh > .acts, .note:hover > .acts { opacity: 1; }
+  .acts button { border: 0; background: none; padding: 0 5px; color: var(--dim); }
+  .acts button:hover { color: var(--fg); }
+
+  textarea, .bh input { background: transparent; border: 1px solid transparent; border-radius: 4px; padding: 2px 6px; field-sizing: content; resize: none; }
+  textarea:hover, .bh input:hover { border-color: var(--line); }
+  textarea:focus, .bh input:focus { outline: none; border-color: var(--dim); background: var(--panel); }
+  .bh input { min-width: 3ch; max-width: 70ch; font-family: ui-monospace, Consolas, monospace; font-size: 12px; background: var(--sunk); }
+
+  .note { padding-left: 12px; border-left: 3px solid var(--note); }
+  .note.xml { border-left-style: dashed; border-left-color: var(--faint); }
+  .note textarea { width: 100%; color: var(--dim); font-style: italic; min-height: 1.6em; }
+  .note > .acts { position: absolute; right: 0; top: 0; }
+
+  .flow > .bh .kw { color: var(--flow); }
+  .flow > .bb { margin-left: 7px; padding-left: 14px; border-left: 2px solid color-mix(in srgb, var(--flow) 40%, transparent); }
+  .stmt > .bh .kw { color: var(--flow); }
+  .stmt textarea { flex: 1; min-width: 20ch; font-family: ui-monospace, Consolas, monospace; font-size: 12px; background: var(--sunk); }
+
+  .task { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--task); border-radius: 6px; padding: 4px 10px; }
+  .task > .bh .tid { font-weight: 700; color: var(--task); font-family: ui-monospace, Consolas, monospace; }
+  .task > .bh .sum { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 0; min-width: 0; }
+  .task > .bb { padding: 6px 0 4px; border-top: 1px solid var(--line); margin-top: 4px; }
+  .py { border-left: 3px solid var(--py); padding-left: 10px; }
+  .py > .bh .kw { color: var(--py); }
+  .py .first { color: var(--dim); font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+  .info > .bh .kw { color: var(--dim); }
+
+  /* parameter tree */
+  .pg { margin: 0; }
+  .pg > .bh { min-height: 22px; }
+  .pg > .bb { margin-left: 7px; padding-left: 14px; border-left: 1px solid var(--line); }
+  .pk { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: var(--dim); }
+  .pg > .bh .pk { color: var(--fg); font-weight: 600; }
+  .prow { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; padding: 1px 0 1px 22px; }
+  .prow > .pk { min-width: 16ch; }
+  .prow:hover { background: var(--sunk); }
+  textarea.v { min-width: 10ch; max-width: 100%; background: var(--sunk); border-color: var(--line); padding: 1px 6px; }
+  textarea.v:placeholder-shown { border-style: dashed; }
+  .sub { font-size: 11px; color: var(--faint); margin-right: 3px; }
+  .field { display: inline-flex; align-items: center; }
+  .auto { font-size: 11px; color: var(--faint); display: inline-flex; gap: 3px; align-items: center; }
   .expr { color: var(--expr); }
-  .hit, tr.hit td.path { background: var(--hit); }
-  .CodeMirror { height: auto; border: 1px solid var(--line); border-radius: 3px; font: 12px/1.4 ui-monospace, Consolas, monospace; margin-bottom: 4px; }
-  .pyerr { background: rgba(220, 38, 38, .22); }
-  @media (max-width: 700px) { body { grid-template: auto auto 1fr / 1fr; } aside { max-height: 30vh; border-right: 0; border-bottom: 1px solid var(--line); } }
+  .hit, .hit textarea.v { background: var(--hit) !important; }
+
+  .CodeMirror { height: auto; border: 1px solid var(--line); border-radius: 4px; margin: 4px 0; }
+  .pyerr { background: color-mix(in srgb, var(--bad) 25%, transparent); }
+  .pyres.bad { color: var(--bad); }
+  @media (max-width: 760px) {
+    body { grid-template: auto auto 1fr / 1fr; }
+    aside { width: auto; max-height: 28vh; border-right: 0; border-bottom: 1px solid var(--line); }
+    main { grid-column: 1; padding: 0 12px 40vh; }
+    #q { width: 100%; }
+    .prow > .pk { min-width: 0; }
+  }
 </style>
 </head>
 <body>
 <header>
+  <span class="brand">🗒️ xjnl</span>
   <button id="openDir" title="Abrir uma pasta de journals (Edge/Chrome)">Abrir pasta</button>
   <button id="openFile">Abrir arquivo</button>
-  <span class="name" id="fname"></span><span id="dirty">● não salvo</span>
-  <button id="save" title="Ctrl+S">Salvar</button>
-  <button id="revert">Descartar</button>
-  <button id="expand" title="Expandir todos os blocos">Expandir tudo</button>
-  <button id="collapse" title="Recolher todos os blocos">Recolher tudo</button>
+  <div class="file"><span id="fname"></span><span id="state"></span></div>
+  <button id="save" class="primary" title="Ctrl+S">Salvar</button>
+  <button id="revert" title="Volta ao conteúdo do disco">Descartar</button>
   <span class="grow"></span>
-  <input id="q" type="search" placeholder="Buscar">
-  <input id="r" placeholder="Substituir por">
-  <button id="replace">Substituir tudo</button>
-  <label><input type="checkbox" id="all"> mostrar tudo</label>
-  <span id="status"></span>
+  <input id="q" type="search" placeholder="Buscar (Ctrl+F)">
+  <button id="toggleReplace" title="Substituir em todo o journal">Substituir…</button>
+  <div id="replaceBar"><input id="r" placeholder="substituir por"><button id="replace">Substituir tudo</button></div>
 </header>
-<aside id="files"></aside>
-<main id="journal"><p class="empty">Abra uma pasta de batches (por exemplo <code>…/Isatis.neo-mining/&lt;projeto&gt;/batch</code>) ou um arquivo <code>.xjnl</code>. Os arquivos são lidos e gravados localmente pelo navegador; nada é enviado a lugar nenhum.</p></main>
+<aside><h2 id="ftitle">Journals</h2><div id="files"></div></aside>
+<main id="journal">
+  <div class="welcome">
+    <h1>xjnl viewer</h1>
+    <p>Veja e edite batches do Isatis.neo sem licença. Os arquivos são lidos e gravados pelo navegador; nada sai da sua máquina.</p>
+    <div class="btns"><button class="primary" onclick="$('openDir').click()">Abrir pasta de batches</button><button onclick="$('openFile').click()">Abrir um .xjnl</button></div>
+    <div class="legend"><span><i style="background:var(--task)"></i>task</span><span><i style="background:var(--flow)"></i>foreach / for / if</span><span><i style="background:var(--note)"></i>comentário</span><span><i style="background:var(--py)"></i>python</span></div>
+  </div>
+</main>
 <input type="file" id="picker" accept=".xjnl" hidden>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/mode/python/python.min.js"></script>
@@ -85,18 +160,19 @@
 <script>
 const $ = id => document.getElementById(id);
 const fsApi = 'showDirectoryPicker' in window;
-let files = [], cur = null; // cur: { path, handle, src, doc }
+let files = [], cur = null; // cur: { path, handle, src, doc, dirty }
 
 function h(tag, props, ...kids) {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(props || {})) k.startsWith('on') ? e.addEventListener(k.slice(2), v) : k in e ? e[k] = v : e.setAttribute(k, v);
-  e.append(...kids.flat().filter(k => k != null && k !== false));
+  e.append(...kids.flat(Infinity).filter(k => k != null && k !== false));
   return e;
 }
-const status = s => $('status').textContent = s;
-function setDirty(d) { document.body.classList.toggle('dirty', d); if (cur) cur.dirty = d; }
+const state = s => $('state').textContent = s;
+function setDirty(d) { document.body.classList.toggle('dirty', d); if (cur) cur.dirty = d; state(d ? '● alterações não salvas' : cur ? 'sem alterações' : ''); }
 const changed = () => setDirty(true);
 const query = () => $('q').value.trim().toLowerCase();
+const has = (s, q) => s.toLowerCase().includes(q);
 
 // ---- files --------------------------------------------------------------
 async function walk(dir, prefix = '') {
@@ -122,16 +198,17 @@ async function load(f, file) {
   if (!discard()) return;
   const src = await (file || await f.handle.getFile()).text();
   cur = { ...f, src };
-  $('fname').textContent = f.path;
+  document.body.classList.add('loaded');
+  $('fname').textContent = f.path.split('/').pop();
+  $('fname').title = f.path;
   document.title = f.path.split('/').pop() + ' · xjnl';
   renderFiles();
   reparse();
 }
 
 function reparse() {
-  setDirty(false);
-  try { cur.doc = XJNL.parse(cur.src); render(); status(''); }
-  catch (e) { cur.doc = null; $('journal').replaceChildren(h('p', { className: 'empty', textContent: 'Não foi possível ler o journal: ' + e.message })); }
+  try { cur.doc = XJNL.parse(cur.src); setDirty(false); render(); }
+  catch (e) { cur.doc = null; setDirty(false); $('journal').replaceChildren(h('p', { className: 'welcome', textContent: 'Não foi possível ler o journal: ' + e.message })); }
 }
 
 async function save() {
@@ -142,7 +219,7 @@ async function save() {
   } else {
     h('a', { href: URL.createObjectURL(new Blob([out], { type: 'application/xml' })), download: cur.path.split('/').pop() }).click();
   }
-  cur.src = out; setDirty(false); status('salvo');
+  cur.src = out; setDirty(false); state('salvo ' + new Date().toLocaleTimeString());
 }
 
 $('openDir').onclick = async () => {
@@ -150,11 +227,12 @@ $('openDir').onclick = async () => {
   if (!discard()) return;
   const dir = await window.showDirectoryPicker({ mode: 'readwrite' }).catch(() => null);
   if (!dir) return;
-  files = []; cur = null; setDirty(false);
+  files = [];
   await walk(dir);
   files.sort((a, b) => a.path.localeCompare(b.path, undefined, { numeric: true }));
+  document.body.classList.add('folder');
+  $('ftitle').textContent = `${dir.name} · ${files.length} journals`;
   renderFiles();
-  status(`${files.length} journals em ${dir.name}`);
 };
 $('openFile').onclick = async () => {
   if (!('showOpenFilePicker' in window)) return $('picker').click();
@@ -164,72 +242,165 @@ $('openFile').onclick = async () => {
 $('picker').onchange = e => { const file = e.target.files[0]; if (file) load({ path: file.name }, file); e.target.value = ''; };
 $('save').onclick = save;
 $('revert').onclick = () => cur && cur.dirty && confirm('Descartar todas as alterações?') && reparse();
-addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); save(); } });
+$('toggleReplace').onclick = () => { document.body.classList.toggle('replacing'); $('r').focus(); };
+addEventListener('keydown', e => {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  if (e.key === 's') { e.preventDefault(); save(); }
+  if (e.key === 'f' && cur) { e.preventDefault(); $('q').focus(); $('q').select(); }
+});
 addEventListener('beforeunload', e => { if (cur && cur.dirty) e.preventDefault(); });
 
 // ---- journal ------------------------------------------------------------
 function render() {
   if (!cur || !cur.doc) return;
-  const root = XJNL.elements(cur.doc)[0];
-  $('journal').replaceChildren(...XJNL.blocks(root).map(n => block(n, root)));
+  const root = XJNL.elements(cur.doc)[0], all = [];
+  (function count(n) { for (const c of XJNL.elements(n)) { if (c.name !== 'param') { all.push(c.name); count(c); } } })(root);
+  const n = name => all.filter(x => x === name).length;
+  const loops = n('foreach') + n('for'), conds = n('if');
+  const bar = h('div', { className: 'bar' },
+    h('button', { textContent: 'Expandir tudo', onclick: () => openAll(true) }),
+    h('button', { textContent: 'Recolher tudo', onclick: () => openAll(false) }),
+    h('span', { className: 'count', textContent: [`${n('task')} task${n('task') === 1 ? '' : 's'}`, loops && `${loops} loops`, conds && `${conds} if`, n('python') && `${n('python')} python`].filter(Boolean).join(' · ') }));
+  $('journal').replaceChildren(bar, ...XJNL.blocks(root).map(c => block(c, root)));
+}
+
+// expanding opens everything down to the parameter groups; collapsing folds the
+// journal blocks and leaves each task's tree as it was
+function openAll(v) {
+  (function walk(n) { if (n.type === 'el' && (v || n.name !== 'param')) n._open = v; XJNL.elements(n).forEach(walk); })(cur.doc);
+  render();
 }
 
 function actions(n, parent) {
-  const act = (label, title, fn) => h('button', { textContent: label, title, onclick: e => { e.preventDefault(); e.stopPropagation(); fn(); changed(); render(); } });
+  const act = (label, title, fn) => h('button', { textContent: label, title, onclick: e => { e.stopPropagation(); fn(); changed(); render(); } });
   return h('span', { className: 'acts' },
-    n.type === 'el' && act('⏻', 'Ativar/desativar (disabled="block")', () => XJNL.setAttr(n, 'disabled', XJNL.attr(n, 'disabled') ? null : 'block')),
+    n.type === 'el' && act('⏻', 'Ativar/desativar no Isatis (disabled="block")', () => XJNL.setAttr(n, 'disabled', XJNL.attr(n, 'disabled') ? null : 'block')),
     act('↑', 'Mover para cima', () => XJNL.move(parent, n, -1)),
     act('↓', 'Mover para baixo', () => XJNL.move(parent, n, 1)),
-    act('⧉', 'Duplicar', () => { XJNL.duplicate(parent, n); }),
+    act('⧉', 'Duplicar', () => XJNL.duplicate(parent, n)),
     act('✕', 'Apagar', () => XJNL.remove(parent, n)));
 }
 
-const hasExpr = (input) => input.classList.toggle('expr', input.value.includes('$('));
+const off = n => n.type === 'el' && XJNL.attr(n, 'disabled');
+const offChip = n => off(n) && h('span', { className: 'chip off', textContent: 'desativado' });
+const kw = t => h('span', { className: 'kw', textContent: t });
+const exprMark = el => { el.classList.toggle('expr', el.value.includes('$(')); return el; };
 
-function attrInputs(n, skip = []) {
-  return n.attrs.filter(a => !skip.includes(a.name) && a.name !== 'disabled').flatMap(a => [
-    h('span', { className: 'attr', textContent: a.name }),
-    h('input', { value: a.value, oninput: e => { XJNL.setAttr(n, a.name, e.target.value); hasExpr(e.target); changed(); } })]);
+// a block with a header that folds its body; the body is built on first open
+function collapsible(n, cls, head, body, def, force) {
+  const box = h('div', { className: `blk collapsible ${cls}` + (off(n) ? ' off' : '') });
+  const bd = h('div', { className: 'bb' });
+  let built = false;
+  const set = v => { n._open = v; box.classList.toggle('shut', !v); if (v && !built) { built = true; bd.append(...[body()].flat(Infinity).filter(Boolean)); } };
+  const hd = h('div', { className: 'bh', onclick: e => { if (!e.target.closest('input, textarea, .acts, label')) set(box.classList.contains('shut')); } }, h('button', { className: 'chev', title: 'Expandir/recolher' }), head);
+  box.append(hd, bd);
+  set(force || (n._open ?? def));
+  return box;
 }
 
-function textArea(get, set) {
-  const t = h('textarea', { value: get(), spellcheck: false, oninput: e => { set(e.target.value); changed(); } });
-  const q = query(); if (q && t.value.toLowerCase().includes(q)) t.classList.add('hit');
-  return t;
+function attrInput(n, name) {
+  if (!XJNL.attr(n, name)) return null;
+  return exprMark(h('input', { value: XJNL.attr(n, name).value, title: name, spellcheck: false, oninput: e => { XJNL.setAttr(n, name, e.target.value); exprMark(e.target); changed(); } }));
+}
+const otherAttrs = (n, skip) => n.attrs.filter(a => !skip.includes(a.name) && a.name !== 'disabled').map(a => [h('span', { className: 'dim', textContent: a.name }), attrInput(n, a.name)]);
+
+function textBox(get, set, cls = '') {
+  const q = query();
+  return exprMark(h('textarea', { className: cls + (q && has(get(), q) ? ' hit' : ''), value: get(), rows: 1, spellcheck: false, oninput: e => { set(e.target.value); exprMark(e.target); changed(); } }));
 }
 
 function block(n, parent) {
-  if (n.type === 'comment')
-    return h('div', { className: 'block' }, h('div', { className: 'head' }, h('span', { className: 'xml', textContent: '<!-- -->' }), actions(n, parent)),
-      textArea(() => XJNL.value(n), v => XJNL.setValue(n, v.replace(/\r?\n/g, cur.doc.eol))));
-  const off = XJNL.attr(n, 'disabled') ? ' off' : '';
-  if (n.name === 'task') return task(n, parent, off);
-  const kids = XJNL.elements(n);
-  if (kids.length) {
-    // inputs stay out of <summary>, where typing a space would toggle the block
-    const d = h('details', { className: 'block' + off, open: n._open ?? n.name !== 'info', ontoggle: () => n._open = d.open },
-      h('summary', {}, h('span', { className: 'head', style: 'display:inline-flex;width:calc(100% - 1em)' }, h('span', { className: 'tag', textContent: n.name }),
-        h('span', { className: 'attr', textContent: n.attrs.filter(a => a.name !== 'disabled').map(a => `${a.name}=${a.value}`).join('  ') }), actions(n, parent))),
-      n.attrs.some(a => a.name !== 'disabled') && h('div', { className: 'head' }, attrInputs(n)),
-      XJNL.blocks(n).map(c => block(c, n)));
-    return d;
-  }
-  if (n.name === 'python') {
-    const first = XJNL.text(n).split('\n').map(s => s.trim()).find(Boolean) || '';
-    const q = query(), ed = pyEditor(n);
-    const d = h('details', { className: 'block' + off, open: !!n._open || (!!q && XJNL.text(n).toLowerCase().includes(q)), ontoggle: () => { n._open = d.open; d.open && ed.mount(); } },
-      h('summary', {}, h('span', { className: 'head', style: 'display:inline-flex;width:calc(100% - 1em)' }, h('span', { className: 'tag', textContent: 'python' }),
-        h('span', { className: 'attr', textContent: first }), actions(n, parent))),
-      ed);
-    return d;
-  }
-  const showText = XJNL.text(n) !== '' || !n.attrs.length;
-  return h('div', { className: 'block' + off },
-    h('div', { className: 'head' }, h('span', { className: 'tag', textContent: n.name }), attrInputs(n), actions(n, parent)),
-    showText && textArea(() => XJNL.text(n), v => XJNL.setText(n, v, cur.doc.eol)));
+  if (n.type === 'comment') return note(n, parent, true);
+  if (n.name === 'comment') return note(n, parent, false);
+  if (n.name === 'task') return task(n, parent);
+  if (n.name === 'python') return python(n, parent);
+  if (n.name === 'info') return info(n);
+  return XJNL.elements(n).length ? flow(n, parent) : stmt(n, parent);
 }
 
-// python: CodeMirror (mounted on first open, plain textarea if the CDN is unreachable)
+function note(n, parent, xml) {
+  const t = xml ? textBox(() => XJNL.value(n), v => XJNL.setValue(n, v.replace(/\r?\n/g, cur.doc.eol)))
+                : textBox(() => XJNL.text(n), v => XJNL.setText(n, v, cur.doc.eol));
+  t.title = xml ? 'Nota XML (<!-- -->): não aparece no Isatis' : 'Comentário do batch';
+  return h('div', { className: 'blk note' + (xml ? ' xml' : '') + (off(n) ? ' off' : '') }, t, actions(n, parent));
+}
+
+function flow(n, parent) {
+  const a = name => attrInput(n, name);
+  const head = {
+    foreach: () => [kw('foreach'), a('element'), XJNL.attr(n, 'element') && kw('in'), a('array'), otherAttrs(n, ['element', 'array'])],
+    for: () => [kw('for'), a('index'), kw('='), a('start'), kw('…'), a('end'), otherAttrs(n, ['index', 'start', 'end'])],
+    if: () => [kw('if'), a('condition'), otherAttrs(n, ['condition'])],
+    elseif: () => [kw('elseif'), a('condition'), otherAttrs(n, ['condition'])],
+  }[n.name] || (() => [kw(n.name), otherAttrs(n, [])]);
+  return collapsible(n, 'flow', [head(), offChip(n), actions(n, parent)], () => XJNL.blocks(n).map(c => block(c, n)), true);
+}
+
+function stmt(n, parent) {
+  const text = XJNL.text(n), box = textBox(() => XJNL.text(n), v => XJNL.setText(n, v, cur.doc.eol));
+  const parts = {
+    array: () => [kw('array'), attrInput(n, 'name'), kw('='), box],
+    variable: () => [kw('variable'), attrInput(n, 'name'), kw('='), box, otherAttrs(n, ['name'])],
+    include: () => [kw('include'), attrInput(n, 'file'), otherAttrs(n, ['file'])],
+    redirect: () => [kw('redirect'), attrInput(n, 'mode'), kw('→'), box],
+  }[n.name] || (() => [kw(n.name), otherAttrs(n, []), (text !== '' || !n.attrs.length) && box]);
+  return h('div', { className: 'blk stmt' + (off(n) ? ' off' : '') }, h('div', { className: 'bh' }, parts(), offChip(n), actions(n, parent)));
+}
+
+function info(n) {
+  const v = name => XJNL.elements(n).find(c => c.name === name);
+  const line = ['application', 'date'].map(v).filter(Boolean).map(c => XJNL.text(c)).join(' · ');
+  return collapsible(n, 'info', [kw('info'), h('span', { className: 'dim', textContent: line })], () => params(n, ''), false);
+}
+
+// ---- tasks: the parameter tree ------------------------------------------
+const label = e => XJNL.attr(e, 'key')?.value ?? e.name;
+const leaf = e => !XJNL.elements(e).length;
+const hits = (e, q) => has(label(e), q) || e.attrs.some(a => has(a.value, q)) || (leaf(e) ? has(XJNL.text(e), q) : XJNL.elements(e).some(c => hits(c, q)));
+
+function value(e) {
+  return textBox(() => XJNL.text(e), v => XJNL.setText(e, v, cur.doc.eol), 'v');
+}
+
+// param attributes: automatic="yes|no" as a checkbox, a param-level loop as "↻ foreach v in arr", anything else as name + input
+function extras(e) {
+  const out = [];
+  const auto = XJNL.attr(e, 'automatic');
+  if (XJNL.attr(e, 'repeat')) out.push(h('span', { className: 'chip' }, '↻ ', XJNL.attr(e, 'repeat').value, ' ', attrInput(e, 'element'), ' in ', attrInput(e, 'array')));
+  out.push(otherAttrs(e, ['key', 'automatic', 'repeat', 'element', 'array']));
+  if (auto) out.push(h('label', { className: 'auto', title: 'automatic="yes": o Isatis calcula este valor' },
+    h('input', { type: 'checkbox', checked: auto.value === 'yes', onchange: ev => { XJNL.setAttr(e, 'automatic', ev.target.checked ? 'yes' : 'no'); changed(); } }), 'auto'));
+  return out;
+}
+
+function params(parent, q) {
+  return XJNL.elements(parent).filter(e => !q || hits(e, q)).map(e => param(e, q));
+}
+
+function param(e, q) {
+  const kids = XJNL.elements(e), key = h('span', { className: 'pk', textContent: label(e) });
+  if (!kids.length) return h('div', { className: 'prow' }, key, value(e), extras(e));
+  // a node whose children are plain fields (ROOT: path/file/table, VARIABLE: ...) reads best on one line
+  if (kids.every(c => leaf(c) && c.name !== 'param'))
+    return h('div', { className: 'prow' }, key, kids.map(c => h('span', { className: 'field' }, h('span', { className: 'sub', textContent: c.name }), value(c))), extras(e));
+  return collapsible(e, 'pg', [key, extras(e)], () => params(e, q), true, !!q);
+}
+
+function task(n, parent) {
+  const q = query();
+  const vals = [];
+  (function walk(e) { for (const c of XJNL.elements(e)) leaf(c) ? XJNL.text(c) && vals.push(XJNL.text(c)) : walk(c); })(n);
+  const sum = [...new Set(vals)].slice(0, 3).join(' · ');
+  const hit = !q || has(XJNL.attr(n, 'id')?.value || '', q) || XJNL.elements(n).some(e => hits(e, q));
+  const box = collapsible(n, 'task' + (hit ? '' : ' miss'),
+    [h('span', { className: 'tid', textContent: XJNL.attr(n, 'id')?.value ?? 'task' }),
+     XJNL.attr(n, 'version') && h('span', { className: 'chip', textContent: 'v' + XJNL.attr(n, 'version').value }),
+     offChip(n), h('span', { className: 'sum', textContent: sum, title: sum }), actions(n, parent)],
+    () => params(n, hit && q && !has(XJNL.attr(n, 'id')?.value || '', q) ? q : ''), false, !!q && hit);
+  return box;
+}
+
+// ---- python: CodeMirror (built on first open, a plain textarea if the CDN is unreachable)
 // and a syntax check with Pyodide on the Python Isatis embeds (3.11), loaded on first use
 const PYODIDE = 'https://cdn.jsdelivr.net/pyodide/v0.25.1/full/';
 const EXPR = /\$\((?:[^()]|\([^()]*\))*\)/g; // batch $(...) substitutions -> a plain name
@@ -248,80 +419,41 @@ function pyCheck(code) {
   return pyodide.then(p => { p.globals.set('src', code.replace(EXPR, '_')); return p.runPython(CHECK); });
 }
 
-function pyEditor(n) {
-  const box = h('div'), res = h('span', { className: 'attr' });
-  let cm = null, ta = null, bad = null;
-  const mark = line => { if (!cm) return; if (bad != null) cm.removeLineClass(bad, 'background', 'pyerr'); bad = line; if (line != null) cm.addLineClass(line, 'background', 'pyerr'); };
-  const validate = async () => {
-    res.textContent = pyodide ? 'validando…' : 'carregando Python 3.11 (~10 MB na primeira vez)…';
-    try {
-      const out = await pyCheck(cm ? cm.getValue() : XJNL.text(n));
-      if (!out) { res.textContent = '✓ sintaxe OK (Python 3.11)'; mark(null); return; }
-      const [line, msg] = out.split('\t');
-      res.textContent = `✗ linha ${line}: ${msg}`;
-      mark(+line > 0 ? +line - 1 : null);
-      cm && +line > 0 && cm.scrollIntoView({ line: +line - 1, ch: 0 });
-    } catch (e) { res.textContent = 'não foi possível carregar o Pyodide: ' + e.message; }
-  };
-  const wrap = h('div', {}, box, h('div', { className: 'head' }, h('button', { textContent: 'Validar sintaxe', onclick: validate }), res));
-  wrap.mount = () => {
-    if (cm || ta) return;
-    if (!window.CodeMirror) return box.append(ta = textArea(() => XJNL.text(n), v => XJNL.setText(n, v, cur.doc.eol)));
-    cm = CodeMirror(box, { value: XJNL.text(n).replace(/\r\n/g, '\n'), mode: 'python', lineNumbers: true, indentUnit: 4, viewportMargin: Infinity,
-      theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'material-darker' : 'default' });
-    cm.on('change', () => { XJNL.setText(n, cm.getValue(), cur.doc.eol); changed(); mark(null); res.textContent = ''; });
-  };
-  return wrap;
+function python(n, parent) {
+  const q = query(), code = XJNL.text(n);
+  const first = code.split('\n').map(s => s.trim()).find(Boolean) || '';
+  return collapsible(n, 'py', [kw('python'), h('span', { className: 'first', textContent: first }), offChip(n), actions(n, parent)], () => {
+    const box = h('div'), res = h('span', { className: 'pyres dim' });
+    let cm = null, bad = null;
+    const mark = line => { if (!cm) return; if (bad != null) cm.removeLineClass(bad, 'background', 'pyerr'); bad = line; if (line != null) cm.addLineClass(line, 'background', 'pyerr'); };
+    if (window.CodeMirror) {
+      cm = CodeMirror(box, { value: XJNL.text(n).replace(/\r\n/g, '\n'), mode: 'python', lineNumbers: true, indentUnit: 4, viewportMargin: Infinity,
+        theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'material-darker' : 'default' });
+      cm.on('change', () => { XJNL.setText(n, cm.getValue(), cur.doc.eol); changed(); mark(null); res.textContent = ''; });
+      requestAnimationFrame(() => cm.refresh());
+    } else box.append(textBox(() => XJNL.text(n), v => XJNL.setText(n, v, cur.doc.eol), 'v'));
+    const validate = async () => {
+      res.className = 'pyres dim';
+      res.textContent = pyodide ? 'validando…' : 'carregando Python 3.11 (~10 MB na primeira vez)…';
+      try {
+        const out = await pyCheck(cm ? cm.getValue() : XJNL.text(n));
+        if (!out) { res.textContent = '✓ sintaxe OK (Python 3.11)'; mark(null); return; }
+        const [line, msg] = out.split('\t');
+        res.className = 'pyres bad';
+        res.textContent = `✗ linha ${line}: ${msg}`;
+        if (cm && +line > 0) { mark(+line - 1); cm.scrollIntoView({ line: +line - 1, ch: 0 }); }
+      } catch (e) { res.textContent = 'não foi possível carregar o Pyodide: ' + e.message; }
+    };
+    return [box, h('div', { className: 'bh' }, h('button', { textContent: 'Validar sintaxe', onclick: validate }), res)];
+  }, false, !!q && has(code, q));
 }
 
-// a task is a flat table: one row per leaf value, plus the param attributes
-function rows(t) {
-  const out = [];
-  function walk(e, path) {
-    const p = [...path, XJNL.attr(e, 'key')?.value ?? e.name];
-    for (const a of e.attrs) if (a.name !== 'key') out.push({ path: [...p, '@' + a.name], get: () => a.value, set: v => XJNL.setAttr(e, a.name, v), quiet: a.name === 'automatic' });
-    const kids = XJNL.elements(e);
-    if (kids.length) kids.forEach(k => walk(k, p));
-    else out.push({ path: p, get: () => XJNL.text(e), set: v => XJNL.setText(e, v, cur.doc.eol) });
-  }
-  XJNL.elements(t).forEach(k => walk(k, []));
-  return out;
-}
-
-function task(n, parent, off) {
-  const all = rows(n), q = query();
-  const match = r => r.path.join(' ').toLowerCase().includes(q) || r.get().toLowerCase().includes(q);
-  const hit = !q || XJNL.attr(n, 'id')?.value.toLowerCase().includes(q) || all.some(match);
-  const sum = [...new Set(all.filter(r => !r.path.at(-1).startsWith('@')).map(r => r.get()).filter(Boolean))].slice(0, 3).join(' · ');
-  const body = h('table');
-  const fill = () => body.replaceChildren(...all
-    .filter(r => q ? match(r) : $('all').checked || (r.get() !== '' && !r.quiet))
-    .map(r => {
-      const input = h('input', { value: r.get(), oninput: e => { r.set(e.target.value); hasExpr(e.target); changed(); } });
-      hasExpr(input);
-      return h('tr', { className: q ? 'hit' : '' },
-        h('td', { className: 'path', title: r.path.join(' › ') }, h('bdi', {}, r.path.slice(0, -1).map(s => s + ' › ').join(''), h('b', { textContent: r.path.at(-1) }))),
-        h('td', {}, input));
-    }));
-  const d = h('details', { className: 'block task' + off + (hit ? '' : ' miss'), open: q ? hit : !!n._open, ontoggle: () => { n._open = d.open; if (d.open && !body.childNodes.length) fill(); } },
-    h('summary', {}, h('span', { className: 'tag', textContent: XJNL.attr(n, 'id')?.value ?? 'task' }),
-      XJNL.attr(n, 'version') && h('span', { className: 'attr', textContent: 'v' + XJNL.attr(n, 'version').value }),
-      h('span', { className: 'sum', textContent: sum, title: sum }), actions(n, parent)),
-    body);
-  if (d.open) fill();
-  return d;
-}
-
-const openAll = v => { if (!cur || !cur.doc) return; (function walk(n) { n._open = v; XJNL.elements(n).forEach(walk); })(cur.doc); render(); };
-$('expand').onclick = () => openAll(true);
-$('collapse').onclick = () => openAll(false);
 $('q').oninput = render;
-$('all').onchange = render;
 $('replace').onclick = () => {
   const q = $('q').value; if (!cur || !cur.doc || !q) return;
-  const n = XJNL.replaceAll(cur.doc, new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), $('r').value, cur.doc.eol);
-  if (n) changed();
-  status(`${n} substituições`);
+  const count = XJNL.replaceAll(cur.doc, new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), $('r').value, cur.doc.eol);
+  if (count) changed();
+  state(`${count} substituições` + (count ? ' · não salvo' : ''));
   render();
 };
 </script>

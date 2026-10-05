@@ -5,7 +5,7 @@ View and edit Isatis.neo batch journals (`.xjnl`) in the browser, on machines wi
 **https://gstvschlz.github.io/xjnl-viewer/**
 
 - **Abrir pasta** (Edge/Chrome) lists every journal under a folder and saves in place with Ctrl+S. **Abrir arquivo** works anywhere; without the File System Access API, saving downloads a copy.
-- Each task is a flat table of its values (`INPUT_DATASET › ROOT › file = Drillholes`). Empty values and `@automatic` stay hidden until *mostrar tudo*, and `$(…)` expressions are highlighted.
+- The journal reads like a script: comments as text, `foreach v in grade_variables` / `for` / `if` headers edited in place, and tasks as cards. Opening a task shows its parameter tree with every field, empty ones included. Plain-field nodes such as `ROOT` (path/file/table) sit on one line, `automatic` is a checkbox, and `$(…)` expressions are highlighted.
 - Comments, arrays, `foreach`/`for`/`if` attributes, `python`, `message` and `include` are editable. Any block can be moved, duplicated, deleted or toggled with `disabled="block"`.
 - `python` blocks start collapsed, open in CodeMirror with highlighting, and *Validar sintaxe* compiles them with Pyodide on Python 3.11, the version Isatis embeds. `$(…)` substitutions are swapped for a plain name first, and the ~10 MB Pyodide download only happens on the first check.
 - *Buscar* filters the tasks; *Substituir tudo* replaces across values, comments and attributes (never `key`, `id` or `version`).

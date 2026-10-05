@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<batch>
+    <info>
+        <application>Isatis.neo-mining</application>
+        <date>2026-10-05T12:00:00</date>
+        <summary>Exemplo fictício para o xjnl viewer</summary>
+    </info>
+    <comment><![CDATA[
+Estatística e estimativa por vizinho mais próximo de cada teor.
+Dados fictícios: furos, compostas de 2 m e um modelo de blocos 25x25x10 m.]]></comment>
+    <array name="teores">Cu, Au</array>
+    <python><![CDATA[furos = "Furos"
+compostas = "Compostas 2m"
+modelo = "Modelo 25x25x10m"
+print(f"entrada: {furos}/{compostas}, saída: {modelo}")]]></python>
+    <!--Abra a task para ver a árvore de parâmetros.-->
+    <foreach array="teores" element="v">
+        <comment>Estatística das compostas:</comment>
+        <task id="quick-statistics">
+            <param key="DATASET">
+                <param key="ROOT">
+                    <path/>
+                    <file>$(furos)</file>
+                    <table>$(compostas)</table>
+                </param>
+                <param key="SELECTION">
+                    <macroVar>Litologia</macroVar>
+                    <index>Minério</index>
+                </param>
+                <param key="VARIABLES">
+                    <param key="ITEM_1">
+                        <variable>$(v)</variable>
+                    </param>
+                    <param key="ITEM_2"/>
+                </param>
+                <param key="WEIGHT"/>
+            </param>
+            <param key="COMPUTE_QUANTILES">yes</param>
+            <param key="QUANTILES" automatic="no" version="2">
+                <value>0.1,0.25,0.5,0.75,0.9</value>
+            </param>
+            <param key="FULL_STAT">no</param>
+            <param key="CORRELATIONS">no</param>
+            <param key="RANK_CORRELATIONS">no</param>
+            <param key="CONTINGENCY_TABLE">no</param>
+            <param key="BIVARIATE_STATS">no</param>
+            <param key="CHARTS_LAYOUTS"/>
+            <param key="CHARTS_GROUP">
+                <param key="STORE">no</param>
+                <param key="STORE_GRAPHICS">no</param>
+                <param key="STORE_TABLES">yes</param>
+                <param key="NAME">%task-%var-%sel</param>
+            </param>
+        </task>
+        <if condition="v == &quot;Cu&quot;">
+            <comment>Só o cobre vai para o modelo de blocos:</comment>
+            <task version="3" id="quick-interpolation">
+                <param key="GROUP_BASE_PARAMS">
+                    <param key="INPUT_DATASET">
+                        <param key="ROOT">
+                            <path/>
+                            <file>$(furos)</file>
+                            <table>$(compostas)</table>
+                        </param>
+                        <param key="SELECTION"/>
+                        <param key="INPUT_VARS">
+                            <param key="ITEM_1">
+                                <variable>$(v)</variable>
+                            </param>
+                            <param key="ITEM_2"/>
+                        </param>
+                    </param>
+                    <param key="OUTPUT_DATASET">
+                        <param key="ROOT">
+                            <path/>
+                            <file>$(modelo)</file>
+                        </param>
+                        <param key="SELECTION">
+                            <variable>Corpo</variable>
+                        </param>
+                    </param>
+                    <param key="OUTPUT_PATTERN" automatic="yes">%method-%var</param>
+                    <param key="INTERPOLATION_TYPE">NEAREST_NEIGHBOR</param>
+                    <param key="GROUP_INVERSE_DISTANCE_PARAMS">
+                        <param key="INVERSE_DISTANCE_POWER">2</param>
+                    </param>
+                    <param key="CALCULATION_MODE">POINT</param>
+                    <param key="USE_PARCELLING">no</param>
+                </param>
+                <param key="GROUP_SIMPLIFIED_NEIGHBORHOOD">
+                    <param key="SIMPLIFIED_NEIGHBORHOOD_ROTATION" automatic="yes">
+                        <dip>0</dip>
+                        <dipAzimuth>90</dipAzimuth>
+                        <pitch>90</pitch>
+                    </param>
+                    <param key="SIMPLIFIED_NEIGHBORHOOD_SIZE" automatic="no">
+                        <v1>300</v1>
+                        <v2>300</v2>
+                        <v3>30</v3>
+                    </param>
+                    <param key="USE_ANISOTROPIC_DISTANCES">yes</param>
+                </param>
+            </task>
+            <else>
+                <message>$(v): sem estimativa neste exemplo</message>
+            </else>
+        </if>
+    </foreach>
+    <message disabled="block">Fim do exemplo</message>
+</batch>

@@ -169,7 +169,7 @@
   <div class="welcome">
     <h1>xjnl viewer</h1>
     <p>Veja e edite batches do Isatis.neo sem licença. Os arquivos são lidos e gravados pelo navegador; nada sai da sua máquina.</p>
-    <div class="btns"><button class="primary" onclick="$('openDir').click()">Abrir pasta de batches</button><button onclick="$('openFile').click()">Abrir um .xjnl</button></div>
+    <div class="btns"><button class="primary" onclick="$('openDir').click()">Abrir pasta de batches</button><button onclick="$('openFile').click()">Abrir um .xjnl</button><button id="example">Ver exemplo</button></div>
     <div class="legend"><span><i style="background:var(--task)"></i>task</span><span><i style="background:var(--flow)"></i>foreach / for / if</span><span><i style="background:var(--note)"></i>comentário</span><span><i style="background:var(--py)"></i>python</span></div>
   </div>
 </main>
@@ -260,6 +260,10 @@ $('openFile').onclick = async () => {
   if (handle) load({ path: handle.name, handle });
 };
 $('picker').onchange = e => { const file = e.target.files[0]; if (file) load({ path: file.name }, file); e.target.value = ''; };
+$('example').onclick = async () => {
+  const path = 'exemplo/estimativa.xjnl';
+  load({ path }, new File([await (await fetch(path)).text()], 'estimativa.xjnl'));
+};
 $('save').onclick = save;
 $('revert').onclick = () => cur && cur.dirty && confirm('Descartar todas as alterações?') && reparse();
 $('toggleReplace').onclick = () => { document.body.classList.toggle('replacing'); $('r').focus(); };

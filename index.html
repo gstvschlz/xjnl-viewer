@@ -62,6 +62,8 @@
   <span class="name" id="fname"></span><span id="dirty">● não salvo</span>
   <button id="save" title="Ctrl+S">Salvar</button>
   <button id="revert">Descartar</button>
+  <button id="expand" title="Expandir todos os blocos">Expandir tudo</button>
+  <button id="collapse" title="Recolher todos os blocos">Recolher tudo</button>
   <span class="grow"></span>
   <input id="q" type="search" placeholder="Buscar">
   <input id="r" placeholder="Substituir por">
@@ -205,6 +207,14 @@ function block(n, parent) {
       XJNL.blocks(n).map(c => block(c, n)));
     return d;
   }
+  if (n.name === 'python') {
+    const first = XJNL.text(n).split('\n').map(s => s.trim()).find(Boolean) || '';
+    const q = query(), d = h('details', { className: 'block' + off, open: !!n._open || (!!q && XJNL.text(n).toLowerCase().includes(q)), ontoggle: () => n._open = d.open },
+      h('summary', {}, h('span', { className: 'head', style: 'display:inline-flex;width:calc(100% - 1em)' }, h('span', { className: 'tag', textContent: 'python' }),
+        h('span', { className: 'attr', textContent: first }), actions(n, parent))),
+      textArea(() => XJNL.text(n), v => XJNL.setText(n, v, cur.doc.eol)));
+    return d;
+  }
   const showText = XJNL.text(n) !== '' || !n.attrs.length;
   return h('div', { className: 'block' + off },
     h('div', { className: 'head' }, h('span', { className: 'tag', textContent: n.name }), attrInputs(n), actions(n, parent)),
@@ -249,6 +259,9 @@ function task(n, parent, off) {
   return d;
 }
 
+const openAll = v => { if (!cur || !cur.doc) return; (function walk(n) { n._open = v; XJNL.elements(n).forEach(walk); })(cur.doc); render(); };
+$('expand').onclick = () => openAll(true);
+$('collapse').onclick = () => openAll(false);
 $('q').oninput = render;
 $('all').onchange = render;
 $('replace').onclick = () => {

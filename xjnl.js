@@ -1,0 +1,137 @@
+// Lossless .xjnl tokenizer: every node keeps its source text, so an unedited
+// journal serializes byte-for-byte and an edit only rewrites the node it touches.
+const XJNL = (() => {
+  const TOKEN = /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>|<\/[^\s>]+\s*>|<[A-Za-z_][^\s/>]*(?:\s+[^\s=/>]+\s*=\s*(?:"[^"]*"|'[^']*'))*\s*\/?>|[^<]+/y;
+  const ATTR = /(\s+)([^\s=/>]+)(\s*=\s*)(["'])([\s\S]*?)\4/y;
+
+  const decode = s => s.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos);/gi, (_, e) =>
+    e[0] === '#' ? String.fromCodePoint(e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : +e.slice(1))
+      : { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }[e.toLowerCase()]);
+  const escText = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const escAttr = (s, q) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(q === '"' ? /"/g : /'/g, q === '"' ? '&quot;' : '&apos;');
+
+  function parseStart(raw) {
+    const name = raw.match(/^<([^\s/>]+)/)[1];
+    const attrs = [];
+    let pos = name.length + 1, m;
+    while ((ATTR.lastIndex = pos, m = ATTR.exec(raw))) {
+      attrs.push({ ws: m[1], name: m[2], eq: m[3], q: m[4], value: decode(m[5]), raw: m[0] });
+      pos = ATTR.lastIndex;
+    }
+    const rest = raw.slice(pos);
+    const selfClosing = rest.trimStart().startsWith('/');
+    return { type: 'el', name, attrs, tail: rest.slice(0, rest.length - (selfClosing ? 2 : 1)), selfClosing, children: [], close: null };
+  }
+
+  function parse(src) {
+    const doc = { type: 'doc', children: [], eol: src.includes('\r\n') ? '\r\n' : '\n' };
+    const stack = [doc];
+    TOKEN.lastIndex = 0;
+    while (TOKEN.lastIndex < src.length) {
+      const at = TOKEN.lastIndex, m = TOKEN.exec(src);
+      if (!m) throw new Error(`malformed XML at offset ${at}: ${JSON.stringify(src.slice(at, at + 40))}`);
+      const t = m[0], top = stack[stack.length - 1];
+      if (t.startsWith('<!--')) top.children.push({ type: 'comment', raw: t });
+      else if (t.startsWith('<![CDATA[')) top.children.push({ type: 'cdata', raw: t });
+      else if (t.startsWith('<?')) top.children.push({ type: 'pi', raw: t });
+      else if (t.startsWith('</')) {
+        const name = t.slice(2).trim().slice(0, -1).trim();
+        if (top.type !== 'el' || top.name !== name) throw new Error(`unexpected </${name}> at offset ${at}`);
+        top.close = t;
+        stack.pop();
+      } else if (t[0] === '<') {
+        const el = parseStart(t);
+        if (open(el) !== t) throw new Error(`cannot round-trip tag at offset ${at}: ${t}`);
+        top.children.push(el);
+        if (!el.selfClosing) stack.push(el);
+      } else top.children.push({ type: 'text', raw: t });
+    }
+    if (stack.length > 1) throw new Error(`unclosed <${stack[stack.length - 1].name}>`);
+    return doc;
+  }
+
+  const open = el => `<${el.name}${el.attrs.map(a => a.raw).join('')}${el.tail}${el.selfClosing && !el.children.length ? '/>' : '>'}`;
+
+  function serialize(n) {
+    if (n.type !== 'el' && n.type !== 'doc') return n.raw;
+    const inner = n.children.map(serialize).join('');
+    if (n.type === 'doc') return inner;
+    if (n.selfClosing && !n.children.length) return open(n);
+    return open(n) + inner + (n.close || `</${n.name}>`);
+  }
+
+  // values -----------------------------------------------------------------
+  const value = n => n.type === 'cdata' ? n.raw.slice(9, -3) : n.type === 'comment' ? n.raw.slice(4, -3) : decode(n.raw);
+  const elements = n => n.children.filter(c => c.type === 'el');
+  const blocks = n => n.children.filter(c => c.type === 'el' || c.type === 'comment');
+  const attr = (el, name) => el.attrs.find(a => a.name === name);
+  const text = el => el.children.filter(c => c.type === 'text' || c.type === 'cdata').map(value).join('');
+
+  function setValue(n, v) {
+    if (n.type === 'cdata') n.raw = `<![CDATA[${v.replace(/]]>/g, ']]]]><![CDATA[>')}]]>`;
+    else if (n.type === 'comment') n.raw = `<!--${v.replace(/--/g, '- -')}-->`;
+    else n.raw = escText(v);
+  }
+
+  function setText(el, v, eol = '\n') {
+    v = v.replace(/\r?\n/g, eol);
+    if (v === text(el)) return;
+    const keep = el.children.find(c => c.type === 'cdata') || el.children.find(c => c.type === 'text') || { type: 'text' };
+    setValue(keep, v);
+    el.children = v ? [keep] : [];
+  }
+
+  function setAttr(el, name, v) {
+    let a = attr(el, name);
+    if (v == null) { el.attrs = el.attrs.filter(x => x !== a); return; }
+    if (!a) el.attrs.unshift(a = { ws: ' ', name, eq: '=', q: '"' });
+    a.value = v;
+    a.raw = `${a.ws}${name}${a.eq}${a.q}${escAttr(v, a.q)}${a.q}`;
+  }
+
+  // structure: blocks move among block siblings; the whitespace text nodes stay put
+  function move(parent, n, dir) {
+    const sib = blocks(parent), j = sib.indexOf(n) + dir;
+    if (j < 0 || j >= sib.length) return;
+    const a = parent.children.indexOf(n), b = parent.children.indexOf(sib[j]);
+    [parent.children[a], parent.children[b]] = [parent.children[b], parent.children[a]];
+  }
+
+  const indentOf = (parent, i) => {
+    const prev = parent.children[i - 1];
+    return prev && prev.type === 'text' && !prev.raw.trim() ? prev : null;
+  };
+
+  function duplicate(parent, n) {
+    const i = parent.children.indexOf(n), ws = indentOf(parent, i);
+    const copy = parse(serialize(n)).children[0];
+    parent.children.splice(i + 1, 0, ...(ws ? [{ type: 'text', raw: ws.raw }] : []), copy);
+    return copy;
+  }
+
+  function remove(parent, n) {
+    const i = parent.children.indexOf(n), ws = indentOf(parent, i);
+    parent.children.splice(ws ? i - 1 : i, ws ? 2 : 1);
+  }
+
+  // find & replace over values: text, CDATA, comments and attributes other than the schema ids
+  const FIXED = new Set(['key', 'id', 'version']);
+  function replaceAll(n, re, by, eol = '\n') {
+    let count = 0;
+    const sub = s => s.replace(re, () => (count++, by));
+    (function walk(n) {
+      if (n.type === 'el') for (const a of n.attrs) if (!FIXED.has(a.name)) { const v = sub(a.value); if (v !== a.value) setAttr(n, a.name, v); }
+      for (const c of n.children || []) {
+        if (c.type === 'el') walk(c);
+        else if (c.type !== 'pi' && (c.type !== 'text' || c.raw.trim())) {
+          const v = value(c), w = sub(v);
+          if (w !== v) setValue(c, w.replace(/\r?\n/g, eol));
+        }
+      }
+    })(n);
+    return count;
+  }
+
+  return { parse, serialize, value, setValue, elements, blocks, attr, text, setText, setAttr, move, duplicate, remove, replaceAll };
+})();
+if (typeof module !== 'undefined') module.exports = XJNL;

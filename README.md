@@ -23,4 +23,4 @@ The check round-trips every journal under the folder byte-identically, then veri
 
 ## Development
 
-There is no build step. Open `index.html` through any static server; Pages serves `main` from the repository root.
+There is no build step: `mise run serve` opens it on http://localhost:8080. Pages serves `main` from the repository root.

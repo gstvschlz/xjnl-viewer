@@ -4,3 +4,7 @@ node = "22"
 [tasks.check]
 description = "round-trip every journal under a folder byte-identical (default ~/Documents/Isatis.neo-mining)"
 run = "node check.cjs"
+
+[tasks.serve]
+description = "serve the page locally and open it"
+run = "npx -y http-server -c-1 -p 8080 -o"

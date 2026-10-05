@@ -1,27 +1,30 @@
 # xjnl-viewer
 
-View and edit Isatis.neo batch journals (`.xjnl`) in the browser, on machines without an Isatis licence.
+Visualizador e editor de batches do Isatis.neo (`.xjnl`) para máquinas sem licença.
 
 **https://gstvschlz.github.io/xjnl-viewer/**
 
-- **Abrir pasta** (Edge/Chrome) lists every journal under a folder and saves in place with Ctrl+S. **Abrir arquivo** works anywhere; without the File System Access API, saving downloads a copy.
-- The journal reads like a script: comments as text, `foreach v in grade_variables` / `for` / `if` headers edited in place, and tasks as cards. Opening a task shows its parameter tree with every field, empty ones included. Plain-field nodes such as `ROOT` (path/file/table) sit on one line, `automatic` is a checkbox, and `$(…)` expressions are highlighted.
-- Comments, arrays, `foreach`/`for`/`if` attributes, `python`, `message` and `include` are editable. Any block can be moved, duplicated, deleted or toggled with `disabled="block"`.
-- `python` blocks start collapsed, open in CodeMirror with highlighting, and *Validar sintaxe* compiles them with Pyodide on Python 3.11, the version Isatis embeds. `$(…)` substitutions are swapped for a plain name first, and the ~10 MB Pyodide download only happens on the first check.
-- *Buscar* filters the tasks; *Substituir tudo* replaces across values, comments and attributes (never `key`, `id` or `version`).
+![Abrindo o batch de exemplo](docs/demo.gif)
 
-Files are read and written locally and are never uploaded; CodeMirror and Pyodide are fetched from public CDNs. The page has no schema: it edits what the journal already contains, so new tasks come from duplicating an existing one.
+## Uso
 
-## Fidelity
+No Edge ou no Chrome, abra uma pasta de batches e salve com Ctrl+S no próprio arquivo. Em outros navegadores, abra um `.xjnl`; o Salvar baixa uma cópia. O navegador lê e grava os arquivos na sua máquina, sem enviá-los a servidor algum.
 
-`xjnl.js` is a small tokenizer that keeps each node's source text. An unedited journal therefore serializes byte for byte (CRLF, CDATA, entity spelling, `<a/>` vs `<a></a>`), and an edit only rewrites the node it touches, so git diffs show just the change.
+No journal, você pode:
+
+- editar valores, comentários e os cabeçalhos de `foreach`, `for` e `if`;
+- mover, duplicar, apagar ou desativar blocos;
+- buscar e substituir em todo o arquivo;
+- validar a sintaxe dos blocos `python` no Python 3.11, a versão do Isatis.
+
+O botão **Ver exemplo** abre [`exemplo/estimativa.xjnl`](exemplo/estimativa.xjnl), com dados fictícios.
+
+## Fidelidade
+
+Sem edição, o arquivo salvo é idêntico ao original byte a byte, então o diff mostra só o que você mudou. Para conferir uma pasta inteira:
 
 ```
-mise run check [folder]   # default ~/Documents/Isatis.neo-mining
+mise run check [pasta]
 ```
 
-The check round-trips every journal under the folder byte-identically, then verifies that duplicate/move/edit keep the file intact. Journals are never committed.
-
-## Development
-
-There is no build step: `mise run serve` opens it on http://localhost:8080. Pages serves `main` from the repository root.
+Para rodar localmente: `mise run serve`.

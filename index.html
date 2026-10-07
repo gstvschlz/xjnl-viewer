@@ -49,8 +49,10 @@
   aside button.cur { background: var(--sunk); box-shadow: inset 3px 0 var(--task); font-weight: 600; }
 
   main { grid-column: 2; overflow: auto; padding: 0 24px 40vh; min-width: 0; }
-  #save, #revert { display: none; }
-  body.loaded #save, body.loaded #revert { display: inline-block; }
+  #save, #revert, #undo, #redo { display: none; }
+  body.loaded #save, body.loaded #revert, body.loaded #undo, body.loaded #redo { display: inline-block; }
+  button:disabled { opacity: .4; cursor: default; }
+  button:disabled:hover { border-color: var(--line); }
   .bar { position: sticky; top: 0; z-index: 2; display: flex; gap: 8px; align-items: center; padding: 10px 0; background: var(--bg); border-bottom: 1px solid var(--line); margin-bottom: 10px; }
   .bar .count { color: var(--dim); margin-left: 8px; }
   .welcome { max-width: 520px; margin: 12vh auto; text-align: center; color: var(--dim); }
@@ -158,7 +160,9 @@
   <button id="openFile">Abrir arquivo</button>
   <div class="file"><span id="fname"></span><span id="state"></span></div>
   <button id="save" class="primary" title="Ctrl+S">Salvar</button>
-  <button id="revert" title="Volta ao conteúdo do disco">Descartar</button>
+  <button id="revert" title="Volta ao conteúdo do disco (Ctrl+Z desfaz)">Descartar</button>
+  <button id="undo" title="Desfazer (Ctrl+Z)" disabled>↶</button>
+  <button id="redo" title="Refazer (Ctrl+Y)" disabled>↷</button>
   <span class="grow"></span>
   <input id="q" type="search" placeholder="Buscar (Ctrl+F)">
   <button id="toggleReplace" title="Substituir em todo o journal">Substituir…</button>
@@ -190,7 +194,34 @@ function h(tag, props, ...kids) {
 }
 const state = s => $('state').textContent = s;
 function setDirty(d) { document.body.classList.toggle('dirty', d); if (cur) cur.dirty = d; state(d ? '● alterações não salvas' : cur ? 'sem alterações' : ''); }
-const changed = () => setDirty(true);
+
+// ---- history: one clone of the doc per step; a run of typing is one step, closed after
+// 700 ms of quiet. `base` is the doc as of the last closed step
+let undo = [], redo = [], base = null, pending = false, quiet = 0;
+function resetHistory() { undo = []; redo = []; pending = false; clearTimeout(quiet); base = structuredClone(cur.doc); syncHistory(); }
+function changed(typing) {
+  if (!pending) { undo.push(base); if (undo.length > 200) undo.shift(); redo = []; pending = true; }
+  setDirty(true);
+  clearTimeout(quiet);
+  typing ? quiet = setTimeout(commit, 700) : commit();
+}
+function commit() {
+  clearTimeout(quiet);
+  if (pending) { pending = false; base = structuredClone(cur.doc); }
+  syncHistory();
+}
+function step(from, to) {
+  if (!cur || !cur.doc) return;
+  commit();
+  if (!from.length) return;
+  to.push(base);
+  base = from.pop();
+  cur.doc = structuredClone(base);
+  setDirty(XJNL.serialize(cur.doc) !== cur.src);
+  syncHistory();
+  render();
+}
+function syncHistory() { $('undo').disabled = !undo.length && !pending; $('redo').disabled = !redo.length; }
 const query = () => $('q').value.trim().toLowerCase();
 const has = (s, q) => s.toLowerCase().includes(q);
 
@@ -227,7 +258,7 @@ async function load(f, file) {
 }
 
 function reparse() {
-  try { cur.doc = XJNL.parse(cur.src); setDirty(false); render(); }
+  try { cur.doc = XJNL.parse(cur.src); resetHistory(); setDirty(false); render(); }
   catch (e) { cur.doc = null; setDirty(false); $('journal').replaceChildren(h('p', { className: 'welcome', textContent: 'Não foi possível ler o journal: ' + e.message })); }
 }
 
@@ -265,13 +296,22 @@ $('example').onclick = async () => {
   load({ path }, new File([await (await fetch(path)).text()], 'estimativa.xjnl'));
 };
 $('save').onclick = save;
-$('revert').onclick = () => cur && cur.dirty && confirm('Descartar todas as alterações?') && reparse();
+// discarding is one more step, so Ctrl+Z brings the edits back
+$('revert').onclick = () => { if (!cur || !cur.doc || !cur.dirty) return; commit(); cur.doc = XJNL.parse(cur.src); changed(); setDirty(false); render(); };
+$('undo').onclick = () => step(undo, redo);
+$('redo').onclick = () => step(redo, undo);
 $('toggleReplace').onclick = () => { document.body.classList.toggle('replacing'); $('r').focus(); };
 addEventListener('keydown', e => {
   if (!(e.ctrlKey || e.metaKey)) return;
-  if (e.key === 's') { e.preventDefault(); save(); }
-  if (e.key === 'f' && cur) { e.preventDefault(); $('q').focus(); $('q').select(); }
-});
+  const k = e.key.toLowerCase();
+  if (k === 's') { e.preventDefault(); save(); }
+  if (k === 'f' && cur) { e.preventDefault(); $('q').focus(); $('q').select(); }
+  // the journal's history wins over a field's (and CodeMirror's) own, so every edit undoes the same way
+  if ((k === 'z' || k === 'y') && cur && cur.doc && document.activeElement !== $('q') && document.activeElement !== $('r')) {
+    e.preventDefault(); e.stopPropagation();
+    k === 'y' || e.shiftKey ? step(redo, undo) : step(undo, redo);
+  }
+}, true);
 addEventListener('beforeunload', e => { if (cur && cur.dirty) e.preventDefault(); });
 
 // ---- journal ------------------------------------------------------------
@@ -296,7 +336,7 @@ function openAll(v) {
 }
 
 function actions(n, parent) {
-  const act = (label, title, fn) => h('button', { textContent: label, title, onclick: e => { e.stopPropagation(); fn(); changed(); render(); } });
+  const act = (label, title, fn) => h('button', { textContent: label, title, onclick: e => { e.stopPropagation(); commit(); fn(); changed(); render(); } });
   return h('span', { className: 'acts' },
     n.type === 'el' && act('⏻', 'Ativar/desativar no Isatis (disabled="block")', () => XJNL.setAttr(n, 'disabled', XJNL.attr(n, 'disabled') ? null : 'block')),
     act('↑', 'Mover para cima', () => XJNL.move(parent, n, -1)),
@@ -324,13 +364,13 @@ function collapsible(n, cls, head, body, def, force) {
 
 function attrInput(n, name) {
   if (!XJNL.attr(n, name)) return null;
-  return exprMark(h('input', { value: XJNL.attr(n, name).value, title: name, spellcheck: false, oninput: e => { XJNL.setAttr(n, name, e.target.value); exprMark(e.target); changed(); } }));
+  return exprMark(h('input', { value: XJNL.attr(n, name).value, title: name, spellcheck: false, oninput: e => { XJNL.setAttr(n, name, e.target.value); exprMark(e.target); changed(true); } }));
 }
 const otherAttrs = (n, skip) => n.attrs.filter(a => !skip.includes(a.name) && a.name !== 'disabled').map(a => [h('span', { className: 'dim', textContent: a.name }), attrInput(n, a.name)]);
 
 function textBox(get, set, cls = '') {
   const q = query();
-  return exprMark(h('textarea', { className: cls + (q && has(get(), q) ? ' hit' : ''), value: get(), rows: 1, spellcheck: false, oninput: e => { set(e.target.value); exprMark(e.target); changed(); } }));
+  return exprMark(h('textarea', { className: cls + (q && has(get(), q) ? ' hit' : ''), value: get(), rows: 1, spellcheck: false, oninput: e => { set(e.target.value); exprMark(e.target); changed(true); } }));
 }
 
 function block(n, parent) {
@@ -465,7 +505,7 @@ function python(n, parent) {
     if (window.CodeMirror) {
       cm = CodeMirror(box, { value: XJNL.text(n).replace(/\r\n/g, '\n'), mode: 'python', lineNumbers: true, indentUnit: 4, viewportMargin: Infinity,
         theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'material-darker' : 'default' });
-      cm.on('change', () => { XJNL.setText(n, cm.getValue(), cur.doc.eol); changed(); mark(null); res.textContent = ''; });
+      cm.on('change', () => { XJNL.setText(n, cm.getValue(), cur.doc.eol); changed(true); mark(null); res.textContent = ''; });
       requestAnimationFrame(() => cm.refresh());
     } else box.append(textBox(() => XJNL.text(n), v => XJNL.setText(n, v, cur.doc.eol), 'v'));
     const validate = async () => {
@@ -487,6 +527,7 @@ function python(n, parent) {
 $('q').oninput = render;
 $('replace').onclick = () => {
   const q = $('q').value; if (!cur || !cur.doc || !q) return;
+  commit();
   const count = XJNL.replaceAll(cur.doc, new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), $('r').value, cur.doc.eol);
   if (count) changed();
   state(`${count} substituições` + (count ? ' · não salvo' : ''));

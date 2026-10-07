@@ -12,6 +12,7 @@ No journal, você pode:
 
 - editar valores, comentários e os cabeçalhos de `foreach`, `for` e `if`;
 - mover, duplicar, apagar ou desativar blocos;
+- desfazer e refazer (Ctrl+Z / Ctrl+Y), inclusive o Descartar;
 - buscar e substituir em todo o arquivo;
 - validar a sintaxe dos blocos `python` no Python 3.11, a versão do Isatis.
 

@@ -34,6 +34,16 @@ for (const f of files) {
     assert.strictEqual(X.serialize(doc), src, `move differs: ${name}`);
   }
 
+  // copy + paste next to itself gives the same block; pasted elsewhere and removed restores the source
+  const clip = X.copy(parent, task);
+  const [twin] = X.paste(parent, task, clip, doc.eol);
+  assert.strictEqual(X.serialize(twin), X.serialize(task), `copy/paste reindents: ${name}`);
+  X.remove(parent, twin);
+  const [far] = X.paste(batch, X.blocks(batch).at(-1), clip, doc.eol);
+  assert.strictEqual(X.text(leaf(far)), X.text(leaf(task)), `paste changes a value: ${name}`);
+  X.remove(batch, far);
+  assert.strictEqual(X.serialize(doc), src, `paste/remove differs: ${name}`);
+
   // an edit with markup characters survives a re-parse, and the diff shows it both ways
   const p = leaf(task), tricky = 'a<b & "c" ]]> $(v)';
   X.setText(p, tricky, doc.eol);
@@ -44,4 +54,4 @@ for (const f of files) {
   undiff(src, out); undiff(out, src);
   edited++;
 }
-console.log(`ok: ${files.length} journals round-trip byte-identical, ${edited} survived duplicate/move/edit/diff`);
+console.log(`ok: ${files.length} journals round-trip byte-identical, ${edited} survived duplicate/move/copy/paste/edit/diff`);

@@ -368,12 +368,31 @@ function openAll(v) {
 
 function actions(n, parent) {
   const act = (label, title, fn) => h('button', { textContent: label, title, onclick: e => { e.stopPropagation(); commit(); fn(); changed(); render(); } });
+  const btn = (label, title, fn) => h('button', { textContent: label, title, onclick: e => { e.stopPropagation(); fn(); } });
   return h('span', { className: 'acts' },
     n.type === 'el' && act('⏻', 'Ativar/desativar no Isatis (disabled="block")', () => XJNL.setAttr(n, 'disabled', XJNL.attr(n, 'disabled') ? null : 'block')),
     act('↑', 'Mover para cima', () => XJNL.move(parent, n, -1)),
     act('↓', 'Mover para baixo', () => XJNL.move(parent, n, 1)),
     act('⧉', 'Duplicar', () => XJNL.duplicate(parent, n)),
+    btn('⎘', 'Copiar o bloco (XML), para colar neste ou em outro journal', () => copyBlock(parent, n)),
+    btn('⤵', 'Colar depois deste bloco', () => pasteAfter(parent, n)),
     act('✕', 'Apagar', () => XJNL.remove(parent, n)));
+}
+
+// copy & paste: the system clipboard carries the block as XML, so it also goes to and
+// from a text editor; `clip` covers browsers that refuse clipboard access
+let clip = '';
+async function copyBlock(parent, n) {
+  clip = XJNL.copy(parent, n);
+  await navigator.clipboard?.writeText(clip).catch(() => {});
+  state('bloco copiado · ⤵ cola depois de qualquer bloco');
+}
+async function pasteAfter(parent, n) {
+  const text = (await navigator.clipboard?.readText().catch(() => null)) || clip;
+  let add = [];
+  try { commit(); add = XJNL.paste(parent, n, text, cur.doc.eol); } catch {}
+  if (!add.length) return alert('A área de transferência não tem blocos de journal (o XML de uma task, foreach, comment…).');
+  changed(); render();
 }
 
 const off = n => n.type === 'el' && XJNL.attr(n, 'disabled');

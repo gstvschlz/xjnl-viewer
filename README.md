@@ -12,6 +12,7 @@ No journal, você pode:
 
 - editar valores, comentários e os cabeçalhos de `foreach`, `for` e `if`;
 - mover, duplicar, apagar ou desativar blocos;
+- copiar um bloco e colá-lo neste ou em outro journal (vai como XML, então também cola num editor de texto);
 - desfazer e refazer (Ctrl+Z / Ctrl+Y), inclusive o Descartar;
 - ver as linhas alteradas em relação ao arquivo no disco antes de salvar;
 - buscar e substituir em todo o arquivo;

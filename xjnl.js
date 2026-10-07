@@ -132,6 +132,33 @@ const XJNL = (() => {
     return count;
   }
 
+  // copy & paste: a copied block carries its indentation relative to itself, and a
+  // pasted one takes the indentation of the block it lands after. Only whitespace-only
+  // text nodes move, so values and python code are never touched
+  const indent = ws => ws ? ws.raw.slice(ws.raw.lastIndexOf('\n') + 1) : '';
+  function reindent(n, from, to) {
+    for (const c of n.children || []) {
+      if (c.type === 'el') reindent(c, from, to);
+      else if (c.type === 'text' && !c.raw.trim() && c.raw.includes('\n'))
+        c.raw = c.raw.replace(/\n([ \t]*)/g, (m, sp) => '\n' + (sp.startsWith(from) ? to + sp.slice(from.length) : sp));
+    }
+  }
+
+  function copy(parent, n) {
+    const c = parse(serialize(n)).children[0];
+    reindent(c, indent(indentOf(parent, parent.children.indexOf(n))), '');
+    return serialize(c);
+  }
+
+  // throws on text that is not XML; returns the pasted blocks (none if the text had no element)
+  function paste(parent, n, src, eol = '\n') {
+    const add = blocks(parse(src.replace(/\r?\n/g, eol)));
+    const i = parent.children.indexOf(n), ws = indentOf(parent, i);
+    add.forEach(b => reindent(b, '', indent(ws)));
+    parent.children.splice(i + 1, 0, ...add.flatMap(b => [{ type: 'text', raw: ws ? ws.raw : eol }, b]));
+    return add;
+  }
+
   // line diff (Myers) between two sources: [{ t: ' ' | '-' | '+', s, a, b }] with 1-based line numbers
   function diff(x, y) {
     const A = x.split(/\r?\n/), B = y.split(/\r?\n/);
@@ -168,6 +195,6 @@ const XJNL = (() => {
     return [...A.slice(0, s).map((l, i) => ({ t: ' ', s: l, a: i + 1, b: i + 1 })), ...mid, ...A.slice(A.length - e).map((l, i) => same(l, i, A.length - e))];
   }
 
-  return { parse, serialize, value, setValue, elements, blocks, attr, text, setText, setAttr, move, duplicate, remove, replaceAll, diff };
+  return { parse, serialize, value, setValue, elements, blocks, attr, text, setText, setAttr, move, duplicate, remove, replaceAll, copy, paste, diff };
 })();
 if (typeof module !== 'undefined') module.exports = XJNL;

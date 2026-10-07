@@ -132,6 +132,12 @@
   .expr { color: var(--expr); }
   .hit, .hit textarea.v { background: var(--hit) !important; }
 
+  /* references with no definition in reach */
+  .undef { border-color: var(--bad) !important; text-decoration: underline wavy var(--bad); text-decoration-skip-ink: none; }
+  .chip.warn { color: var(--bad); border-color: var(--bad); }
+  #refs { color: var(--bad); }
+  #refs button { border: 0; background: none; padding: 0 3px; color: var(--bad); font-family: ui-monospace, Consolas, monospace; text-decoration: underline dotted; }
+
   /* changes against the file on disk */
   .diff { font-size: 12px; overflow-x: auto; }
   .dl { display: grid; grid-template-columns: 6ch 6ch max-content; white-space: pre; }
@@ -216,7 +222,7 @@ function changed(typing) {
 }
 function commit() {
   clearTimeout(quiet);
-  if (pending) { pending = false; base = structuredClone(cur.doc); }
+  if (pending) { pending = false; base = structuredClone(cur.doc); refreshRefs(); }
   syncHistory();
 }
 function step(from, to) {
@@ -280,6 +286,7 @@ async function save() {
     h('a', { href: URL.createObjectURL(new Blob([out], { type: 'application/xml' })), download: cur.path.split('/').pop() }).click();
   }
   cur.src = out; setDirty(false); state('salvo ' + new Date().toLocaleTimeString());
+  if (scans.has(cur.path)) scans.set(cur.path, XJNL.scan(cur.doc));
 }
 
 $('openDir').onclick = async () => {
@@ -293,7 +300,15 @@ $('openDir').onclick = async () => {
   document.body.classList.add('folder');
   $('ftitle').textContent = `${dir.name} · ${files.length} journals`;
   renderFiles();
+  scanFolder(files);
 };
+// what every journal of the folder defines and includes, to resolve references across files
+let scans = new Map(); // path -> XJNL.scan(), null if it does not parse
+async function scanFolder(list) {
+  const m = new Map();
+  for (const f of list) try { m.set(f.path, XJNL.scan(XJNL.parse(await (await f.handle.getFile()).text()))); } catch { m.set(f.path, null); }
+  if (files === list) { scans = m; refreshRefs(); }
+}
 $('openFile').onclick = async () => {
   if (!('showOpenFilePicker' in window)) return $('picker').click();
   const [handle] = await window.showOpenFilePicker({ types: [{ description: 'Isatis journal', accept: { 'application/xml': ['.xjnl'] } }] }).catch(() => []);
@@ -334,8 +349,35 @@ function render() {
   const bar = h('div', { className: 'bar' },
     h('button', { textContent: 'Expandir tudo', onclick: () => openAll(true) }),
     h('button', { textContent: 'Recolher tudo', onclick: () => openAll(false) }),
-    h('span', { className: 'count', textContent: [`${n('task')} task${n('task') === 1 ? '' : 's'}`, loops && `${loops} loops`, conds && `${conds} if`, n('python') && `${n('python')} python`].filter(Boolean).join(' · ') }));
+    h('span', { className: 'count', textContent: [`${n('task')} task${n('task') === 1 ? '' : 's'}`, loops && `${loops} loops`, conds && `${conds} if`, n('python') && `${n('python')} python`].filter(Boolean).join(' · ') }),
+    h('span', { id: 'refs' }));
   $('journal').replaceChildren(bar, ...XJNL.blocks(root).map(c => block(c, root)));
+  refreshRefs();
+}
+
+// ---- references: $(name) with no definition in this journal or in what it includes
+let undef = new Map(); // name -> where it is defined instead
+function refreshRefs() {
+  if (!cur || !cur.doc) return;
+  const own = XJNL.scan(cur.doc), get = p => p === cur.path ? own : scans.get(p);
+  const known = XJNL.known(cur.path, own, get);
+  const lost = scans.size ? own.includes.filter(f => !get(XJNL.resolve(cur.path, f))) : [];
+  undef = new Map([...own.refs.keys()].filter(w => !known.has(w)).map(w => {
+    const at = [...scans].filter(([p, s]) => p !== cur.path && s && s.defs.has(w)).map(([p]) => p);
+    return [w, at.length ? `definida em ${at.slice(0, 3).join(', ')}${at.length > 3 ? '…' : ''}, que este journal não inclui`
+      : scans.size ? 'não definida em nenhum journal da pasta' : 'não definida neste journal (abra a pasta para seguir os include)'];
+  }));
+  const refs = $('refs');
+  if (refs) refs.replaceChildren(...[
+    undef.size && ['⚠ ', undef.size === 1 ? '1 referência indefinida:' : `${undef.size} referências indefinidas:`,
+      [...undef].map(([w, why]) => h('button', { textContent: w, title: `$(${w}): ${why}\nClique para buscar`, onclick: () => { $('q').value = w; render(); } }))],
+    lost.length && ` ⚠ include não encontrado: ${lost.join(', ')}`].filter(Boolean).flat(Infinity));
+  for (const el of $('journal').querySelectorAll('textarea, input:not([type=checkbox])')) exprMark(el);
+  for (const box of $('journal').querySelectorAll('.task, .py')) {
+    const bad = box._n && [...XJNL.scan(box._n).refs.keys()].filter(w => undef.has(w));
+    box.querySelector(':scope > .bh > .warn')?.remove();
+    if (bad && bad.length) box.querySelector(':scope > .bh > .acts').before(h('span', { className: 'chip warn', textContent: '⚠ ' + bad.map(w => `$(${w})`).join(' '), title: bad.map(w => `$(${w}): ${undef.get(w)}`).join('\n') }));
+  }
 }
 
 // ---- changes against the file on disk, with 3 lines of context
@@ -398,11 +440,20 @@ async function pasteAfter(parent, n) {
 const off = n => n.type === 'el' && XJNL.attr(n, 'disabled');
 const offChip = n => off(n) && h('span', { className: 'chip off', textContent: 'desativado' });
 const kw = t => h('span', { className: 'kw', textContent: t });
-const exprMark = el => { el.classList.toggle('expr', el.value.includes('$(')); return el; };
+// colours $(...) fields and flags the names with no definition in reach (hover says where they are)
+const exprMark = el => {
+  el.classList.toggle('expr', el.value.includes('$('));
+  const bad = XJNL.names(el.value).filter(w => undef.has(w));
+  el.dataset.t ??= el.title;
+  el.classList.toggle('undef', bad.length > 0);
+  el.title = bad.length ? bad.map(w => `$(${w}): ${undef.get(w)}`).join('\n') : el.dataset.t;
+  return el;
+};
 
 // a block with a header that folds its body; the body is built on first open
 function collapsible(n, cls, head, body, def, force) {
   const box = h('div', { className: `blk collapsible ${cls}` + (off(n) ? ' off' : '') });
+  box._n = n; // for the reference chips
   const bd = h('div', { className: 'bb' });
   let built = false;
   const set = (v, keep = true) => { if (keep) n._open = v; box.classList.toggle('shut', !v); if (v && !built) { built = true; bd.append(...[body()].flat(Infinity).filter(Boolean)); } };
@@ -435,7 +486,7 @@ function block(n, parent) {
 function note(n, parent, xml) {
   const t = xml ? textBox(() => XJNL.value(n), v => XJNL.setValue(n, v.replace(/\r?\n/g, cur.doc.eol)))
                 : textBox(() => XJNL.text(n), v => XJNL.setText(n, v, cur.doc.eol));
-  t.title = xml ? 'Nota XML (<!-- -->): não aparece no Isatis' : 'Comentário do batch';
+  t.title = t.dataset.t = xml ? 'Nota XML (<!-- -->): não aparece no Isatis' : 'Comentário do batch';
   return h('div', { className: 'blk note' + (xml ? ' xml' : '') + (off(n) ? ' off' : '') }, t, actions(n, parent));
 }
 

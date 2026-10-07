@@ -195,6 +195,73 @@ const XJNL = (() => {
     return [...A.slice(0, s).map((l, i) => ({ t: ' ', s: l, a: i + 1, b: i + 1 })), ...mid, ...A.slice(A.length - e).map((l, i) => same(l, i, A.length - e))];
   }
 
-  return { parse, serialize, value, setValue, elements, blocks, attr, text, setText, setAttr, move, duplicate, remove, replaceAll, copy, paste, diff };
+  // references: every $(...) is a python expression over batch names. Names come from
+  // array/variable, foreach/for (and param-level repeat) loops, python blocks and includes
+  const EXPR = /\$\((?:[^()]|\([^()]*\))*\)/g;
+  const KW = new Set('False None True and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield'.split(' '));
+  const BUILTIN = new Set(('abs all any ascii bin bool bytearray bytes callable chr classmethod compile complex delattr dict dir divmod enumerate eval exec filter float format frozenset getattr globals hasattr hash hex id input int isinstance issubclass iter len list locals map max min next object oct open ord pow print property range repr reversed round set setattr slice sorted staticmethod str sum super tuple type vars zip __import__ __name__ __file__ app Exception ValueError TypeError KeyError IndexError').split(' '));
+  const STR = /[rbuf]*("""|'''|"|')(?:\\[\s\S]|(?!\1)[^\\])*?\1/gi;
+  const words = s => s.match(/[A-Za-z_]\w*/g) || [];
+
+  function free(expr) {
+    const s = expr.replace(STR, '""'), bound = new Set();
+    for (const m of s.matchAll(/\bfor\s+([\w\s,()]+?)\s+in\b|\blambda\b([^:]*):/g)) words(m[1] || m[2]).forEach(w => bound.add(w));
+    const out = new Set();
+    for (const m of s.matchAll(/(\.\s*)?\b([A-Za-z_]\w*)\b(\s*=(?!=))?/g))
+      if (!m[1] && !m[3] && !KW.has(m[2]) && !BUILTIN.has(m[2]) && !bound.has(m[2])) out.add(m[2]);
+    return [...out];
+  }
+  const names = s => [...new Set([...s.matchAll(EXPR)].flatMap(m => free(m[0].slice(2, -1))))];
+
+  function pyDefs(code) {
+    const s = code.replace(STR, '""').replace(/#.*/g, ''), out = [];
+    for (const m of s.matchAll(/^[ \t]*([\w \t,.()[\]*"]+?)\s*(?:[-+*/%&|^@]|\/\/|\*\*|>>|<<)?=(?!=)/gm)) out.push(...words(m[1].replace(/\.\s*\w+|\[[^\]]*\]/g, '')));
+    for (const m of s.matchAll(/\b(?:def|class)\s+(\w+)|\bas\s+(\w+)|(\w+)\s*:=|\bfor\s+([\w\s,()]+?)\s+in\b|\bglobal\s+([\w \t,]+)/g)) out.push(...words(m.slice(1).find(Boolean)));
+    for (const m of s.matchAll(/^[ \t]*import\s+(.+)|^[ \t]*from\s+\S+\s+import\s+\(?([^)\n]+)/gm))
+      for (const part of (m[1] || m[2]).split(',')) { const w = words(part.replace(/\.\w+/g, '')); w.length && out.push(w.at(-1)); }
+    return out;
+  }
+
+  const LOOP = n => n.name === 'foreach' || n.name === 'for' || attr(n, 'repeat');
+  const EXPR_ATTR = { foreach: ['array'], for: ['start', 'end'], if: ['condition'], elseif: ['condition'] };
+
+  // { defs: Set, includes: [file], refs: Map name -> count }
+  function scan(doc) {
+    const defs = new Set(), includes = [], refs = new Map();
+    const use = list => list.forEach(w => refs.set(w, (refs.get(w) || 0) + 1));
+    (function walk(n) {
+      if (n.type === 'el') {
+        if ((n.name === 'array' || n.name === 'variable') && attr(n, 'name')) defs.add(attr(n, 'name').value);
+        if (LOOP(n)) for (const k of ['element', 'index']) if (attr(n, k)) words(attr(n, k).value).forEach(w => defs.add(w));
+        if (n.name === 'include' && attr(n, 'file')) includes.push(attr(n, 'file').value);
+        if (n.name === 'python') pyDefs(text(n)).forEach(w => defs.add(w));
+        const bare = EXPR_ATTR[n.name] || (attr(n, 'repeat') ? ['array', 'start', 'end'] : []);
+        for (const a of n.attrs) use(!a.value.includes('$(') && bare.includes(a.name) ? free(a.value) : names(a.value));
+      }
+      if (n.name === 'comment') return; // documentation: Isatis prints it as written
+      for (const c of n.children || []) {
+        if (c.type === 'el') walk(c);
+        else if (c.type !== 'comment' && c.type !== 'pi') use(names(value(c)));
+        // a task's own python (SCRIPT params) shares names with the batch through `global`
+        if (c.type === 'cdata') for (const m of value(c).matchAll(/\bglobal\s+([\w \t,]+)/g)) words(m[1]).forEach(w => defs.add(w));
+      }
+    })(doc);
+    return { defs, includes, refs };
+  }
+
+  // names a journal can see: its own plus those of the files it includes, recursively.
+  // include paths are relative to the including file; get(path) -> scan or undefined
+  const resolve = (path, file) => (path.slice(0, path.lastIndexOf('/') + 1) + file.replace(/\\/g, '/'))
+    .split('/').reduce((a, s) => (s === '..' ? a.pop() : s && s !== '.' && a.push(s), a), []).join('/');
+  function known(path, own, get, seen = new Set([path])) {
+    const out = new Set(own.defs);
+    for (const f of own.includes) {
+      const p = resolve(path, f), s = !seen.has(p) && get(p);
+      if (s) { seen.add(p); known(p, s, get, seen).forEach(w => out.add(w)); }
+    }
+    return out;
+  }
+
+  return { parse, serialize, value, setValue, elements, blocks, attr, text, setText, setAttr, move, duplicate, remove, replaceAll, copy, paste, diff, names, scan, resolve, known };
 })();
 if (typeof module !== 'undefined') module.exports = XJNL;

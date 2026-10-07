@@ -15,6 +15,7 @@ No journal, você pode:
 - copiar um bloco e colá-lo neste ou em outro journal (vai como XML, então também cola num editor de texto);
 - desfazer e refazer (Ctrl+Z / Ctrl+Y), inclusive o Descartar;
 - ver as linhas alteradas em relação ao arquivo no disco antes de salvar;
+- achar referências `$(...)` sem definição no journal nem nos seus `include`; com a pasta aberta, o viewer diz em qual journal o nome está definido;
 - buscar e substituir em todo o arquivo;
 - validar a sintaxe dos blocos `python` no Python 3.11, a versão do Isatis.
 

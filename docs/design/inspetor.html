@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Três painéis com inspetor</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f7f7f5}
+a{color:#0b6e63}a:hover{color:#064a42}
+.i-h{font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#6b6a65;margin:0 0 8px}
+.i-node{display:flex;align-items:center;gap:8px;min-height:30px;padding:0 10px;border-radius:6px;font-size:13px;color:#1d1d1b}
+.i-node.on{background:#e6f2f0;color:#064a42;font-weight:600}
+.i-tag{font:500 11px 'IBM Plex Mono',monospace;padding:1px 6px;border-radius:4px}
+.i-field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.i-field label{font-size:12px;color:#6b6a65}
+.i-field input,.i-field select{font:13px 'IBM Plex Mono',monospace;border:1px solid #dcdad4;border-radius:6px;padding:7px 9px;background:#fff;color:#1d1d1b;min-height:34px;box-sizing:border-box;width:100%}
+.i-field input.expr{color:#6d3fd1;background:#f5f1fd;border-color:#d9cdf6}
+fieldset{border:1px solid #e5e4df;border-radius:10px;padding:14px 16px 16px;margin:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px}
+legend{padding:0 6px;font-weight:600;font-size:13px}
+</style>
+</head>
+<body>
+<div style="width:100%;min-height:800px;display:flex;flex-direction:column;background:#f7f7f5;color:#1d1d1b;font-family:'Instrument Sans',sans-serif">
+  <header style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:10px 20px;background:#fff;border-bottom:1px solid #e5e4df">
+    <strong style="font-size:15px">xjnl</strong>
+    <nav aria-label="Caminho" style="font-size:13px;color:#6b6a65">batch › <span style="color:#1d1d1b;font-weight:600">estimativa.xjnl</span></nav>
+    <span style="flex:1"></span>
+    <button style="font:500 13px 'Instrument Sans';border:1px solid #dcdad4;background:#fff;border-radius:8px;padding:0 14px;min-height:36px">Desfazer</button>
+    <button style="font:500 13px 'Instrument Sans';border:1px solid #dcdad4;background:#fff;border-radius:8px;padding:0 14px;min-height:36px">Alterações (2)</button>
+    <button style="font:600 13px 'Instrument Sans';border:0;background:#0b6e63;color:#fff;border-radius:8px;padding:0 16px;min-height:36px">Salvar</button>
+  </header>
+  <div style="flex:1;display:flex;flex-wrap:wrap;min-height:0">
+    <aside style="flex:1 1 200px;max-width:220px;padding:18px 12px;border-right:1px solid #e5e4df">
+      <p class="i-h">Journals</p>
+      <div class="i-node">00_importacao</div><div class="i-node">01_compostas</div>
+      <div class="i-node on">estimativa</div><div class="i-node">03_validacao</div>
+    </aside>
+    <section aria-label="Estrutura" style="flex:1 1 300px;max-width:340px;padding:18px 12px;border-right:1px solid #e5e4df;background:#fbfbfa">
+      <p class="i-h">Estrutura · 2 tasks</p>
+      <div class="i-node"><span class="i-tag" style="background:#fdf3e2;color:#9a5b00">comment</span>Estatística e estimativa…</div>
+      <div class="i-node"><span class="i-tag" style="background:#efe9fb;color:#6d3fd1">array</span>teores = Cu, Au</div>
+      <div class="i-node"><span class="i-tag" style="background:#e8f0fd;color:#1f5fbf">python</span>furos = "Furos"</div>
+      <div class="i-node"><span class="i-tag" style="background:#efe9fb;color:#6d3fd1">foreach</span>v in teores</div>
+      <div class="i-node" style="padding-left:28px"><span class="i-tag" style="background:#e6f2f0;color:#0b6e63">task</span>quick-statistics</div>
+      <div class="i-node" style="padding-left:28px"><span class="i-tag" style="background:#efe9fb;color:#6d3fd1">if</span>v == "Cu"</div>
+      <div class="i-node on" style="margin-left:18px;padding-left:28px"><span class="i-tag" style="background:#0b6e63;color:#fff">task</span>quick-interpolation</div>
+      <div class="i-node" style="padding-left:28px"><span class="i-tag" style="background:#efe9fb;color:#6d3fd1">else</span>message</div>
+      <div class="i-node" style="color:#9b9a94;text-decoration:line-through"><span class="i-tag" style="background:#eee;color:#6b6a65">message</span>Fim do exemplo</div>
+    </section>
+    <main style="flex:999 1 480px;min-width:0;padding:22px 28px;display:flex;flex-direction:column;gap:18px">
+      <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:10px">
+        <h1 style="margin:0;font-size:24px;font-weight:700">quick-interpolation</h1>
+        <span class="i-tag" style="background:#eee;color:#6b6a65">v3</span>
+        <span style="font-size:13px;color:#6b6a65">dentro de foreach v › if v == "Cu"</span>
+        <span style="flex:1"></span>
+        <button style="font:500 13px 'Instrument Sans';border:1px solid #dcdad4;background:#fff;border-radius:8px;padding:0 12px;min-height:34px">Copiar bloco</button>
+        <button style="font:500 13px 'Instrument Sans';border:1px solid #dcdad4;background:#fff;border-radius:8px;padding:0 12px;min-height:34px">Desativar</button>
+      </div>
+      <fieldset><legend>Entrada</legend>
+        <div class="i-field"><label for="a1">Arquivo</label><input id="a1" class="expr" value="$(furos)"></div>
+        <div class="i-field"><label for="a2">Tabela</label><input id="a2" class="expr" value="$(compostas)"></div>
+        <div class="i-field"><label for="a3">Variável 1</label><input id="a3" class="expr" value="$(v)"></div>
+        <div class="i-field"><label for="a4">Seleção</label><input id="a4" placeholder="nenhuma"></div>
+      </fieldset>
+      <fieldset><legend>Saída</legend>
+        <div class="i-field"><label for="b1">Arquivo</label><input id="b1" class="expr" value="$(modelo)"></div>
+        <div class="i-field"><label for="b2">Seleção · variável</label><input id="b2" value="Corpo"></div>
+        <div class="i-field"><label for="b3">Padrão de nome <span style="color:#0b6e63">· automático</span></label><input id="b3" value="%method-%var"></div>
+      </fieldset>
+      <fieldset><legend>Interpolação</legend>
+        <div class="i-field"><label for="c1">Tipo</label><select id="c1"><option>NEAREST_NEIGHBOR</option></select></div>
+        <div class="i-field"><label for="c2">Modo de cálculo</label><select id="c2"><option>POINT</option></select></div>
+        <div class="i-field"><label for="c3">Potência (inverso da distância)</label><input id="c3" value="2"></div>
+        <div class="i-field"><label for="c4">Vizinhança v1 · v2 · v3 (m)</label><input id="c4" value="300 · 300 · 30"></div>
+      </fieldset>
+    </main>
+  </div>
+</div>
+</body>
+</html>

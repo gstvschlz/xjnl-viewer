@@ -132,6 +132,42 @@ const XJNL = (() => {
     return count;
   }
 
-  return { parse, serialize, value, setValue, elements, blocks, attr, text, setText, setAttr, move, duplicate, remove, replaceAll };
+  // line diff (Myers) between two sources: [{ t: ' ' | '-' | '+', s, a, b }] with 1-based line numbers
+  function diff(x, y) {
+    const A = x.split(/\r?\n/), B = y.split(/\r?\n/);
+    let s = 0, e = 0;
+    while (s < A.length && s < B.length && A[s] === B[s]) s++;
+    while (e < A.length - s && e < B.length - s && A[A.length - 1 - e] === B[B.length - 1 - e]) e++;
+    const a = A.slice(s, A.length - e), b = B.slice(s, B.length - e), n = a.length, m = b.length;
+    const mid = [], max = n + m, v = new Int32Array(2 * max + 3), trace = [];
+    const at = (t, k) => t[1][k - t[0]];
+    let found = !max;
+    for (let d = 0; d <= Math.min(max, 3000) && !found; d++) {
+      trace.push([-d - 1, v.slice(max - d, max + d + 3)]);
+      for (let k = -d; k <= d && !found; k += 2) {
+        let i = k === -d || (k !== d && v[max + k] < v[max + k + 2]) ? v[max + k + 2] : v[max + k] + 1, j = i - k;
+        while (i < n && j < m && a[i] === b[j]) i++, j++;
+        v[max + k + 1] = i;
+        found = i >= n && j >= m;
+      }
+    }
+    if (!found) { // too different to be worth aligning: all out, all in
+      a.forEach((l, i) => mid.push({ t: '-', s: l, a: s + i + 1 }));
+      b.forEach((l, j) => mid.push({ t: '+', s: l, b: s + j + 1 }));
+    } else {
+      let i = n, j = m;
+      for (let d = trace.length - 1; d >= 0; d--) {
+        const t = trace[d], k = i - j;
+        const pk = k === -d || (k !== d && at(t, k - 1) < at(t, k + 1)) ? k + 1 : k - 1, pi = at(t, pk), pj = pi - pk;
+        while (i > pi && j > pj) { i--, j--; mid.push({ t: ' ', s: a[i], a: s + i + 1, b: s + j + 1 }); }
+        if (d) i > pi ? mid.push({ t: '-', s: a[--i], a: s + i + 1 }) : mid.push({ t: '+', s: b[--j], b: s + j + 1 });
+      }
+      mid.reverse();
+    }
+    const same = (l, i, o) => ({ t: ' ', s: l, a: i + 1 + o, b: i + 1 + o + B.length - A.length });
+    return [...A.slice(0, s).map((l, i) => ({ t: ' ', s: l, a: i + 1, b: i + 1 })), ...mid, ...A.slice(A.length - e).map((l, i) => same(l, i, A.length - e))];
+  }
+
+  return { parse, serialize, value, setValue, elements, blocks, attr, text, setText, setAttr, move, duplicate, remove, replaceAll, diff };
 })();
 if (typeof module !== 'undefined') module.exports = XJNL;

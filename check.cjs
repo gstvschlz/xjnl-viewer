@@ -9,6 +9,12 @@ assert(files.length, `no .xjnl under ${root}`);
 
 const firstTask = n => n.type === 'el' && n.name === 'task' ? n : (n.children || []).map(firstTask).find(Boolean);
 const leaf = n => X.elements(n).length ? X.elements(n).map(leaf).find(Boolean) : n;
+// the diff, applied either way, gives back both sides
+const undiff = (a, b) => {
+  const ops = X.diff(a, b), eol = a.includes('\r\n') ? '\r\n' : '\n', n = s => s.replace(/\r\n/g, '\n');
+  assert.strictEqual(n(ops.filter(o => o.t !== '+').map(o => o.s).join(eol)), n(a), 'diff loses the old side');
+  assert.strictEqual(n(ops.filter(o => o.t !== '-').map(o => o.s).join(eol)), n(b), 'diff loses the new side');
+};
 let edited = 0;
 for (const f of files) {
   const src = fs.readFileSync(f, 'utf8'), name = path.relative(root, f);
@@ -28,13 +34,14 @@ for (const f of files) {
     assert.strictEqual(X.serialize(doc), src, `move differs: ${name}`);
   }
 
-  // an edit with markup characters survives a re-parse
+  // an edit with markup characters survives a re-parse, and the diff shows it both ways
   const p = leaf(task), tricky = 'a<b & "c" ]]> $(v)';
   X.setText(p, tricky, doc.eol);
   X.setAttr(task, 'disabled', 'block');
-  const again = X.parse(X.serialize(doc));
+  const out = X.serialize(doc), again = X.parse(out);
   assert.strictEqual(X.text(leaf(firstTask(again))), tricky, `edit lost: ${name}`);
   assert.strictEqual(X.attr(firstTask(again), 'disabled').value, 'block');
+  undiff(src, out); undiff(out, src);
   edited++;
 }
-console.log(`ok: ${files.length} journals round-trip byte-identical, ${edited} survived duplicate/move/edit`);
+console.log(`ok: ${files.length} journals round-trip byte-identical, ${edited} survived duplicate/move/edit/diff`);

@@ -49,8 +49,8 @@
   aside button.cur { background: var(--sunk); box-shadow: inset 3px 0 var(--task); font-weight: 600; }
 
   main { grid-column: 2; overflow: auto; padding: 0 24px 40vh; min-width: 0; }
-  #save, #revert, #undo, #redo { display: none; }
-  body.loaded #save, body.loaded #revert, body.loaded #undo, body.loaded #redo { display: inline-block; }
+  #save, #revert, #undo, #redo, #changes { display: none; }
+  body.loaded #save, body.loaded #revert, body.loaded #undo, body.loaded #redo, body.loaded #changes { display: inline-block; }
   button:disabled { opacity: .4; cursor: default; }
   button:disabled:hover { border-color: var(--line); }
   .bar { position: sticky; top: 0; z-index: 2; display: flex; gap: 8px; align-items: center; padding: 10px 0; background: var(--bg); border-bottom: 1px solid var(--line); margin-bottom: 10px; }
@@ -132,6 +132,14 @@
   .expr { color: var(--expr); }
   .hit, .hit textarea.v { background: var(--hit) !important; }
 
+  /* changes against the file on disk */
+  .diff { font-size: 12px; overflow-x: auto; }
+  .dl { display: grid; grid-template-columns: 6ch 6ch max-content; white-space: pre; }
+  .dl.add { background: color-mix(in srgb, var(--task) 18%, transparent); }
+  .dl.del { background: color-mix(in srgb, var(--bad) 18%, transparent); }
+  .ln { color: var(--faint); text-align: right; padding-right: 10px; user-select: none; }
+  .gap { color: var(--faint); padding: 4px 0 4px 12ch; }
+
   /* scrollbars: thin, rounded, themed (Firefox gets the standard properties) */
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -163,6 +171,7 @@
   <button id="revert" title="Volta ao conteúdo do disco (Ctrl+Z desfaz)">Descartar</button>
   <button id="undo" title="Desfazer (Ctrl+Z)" disabled>↶</button>
   <button id="redo" title="Refazer (Ctrl+Y)" disabled>↷</button>
+  <button id="changes" title="Linhas alteradas em relação ao arquivo no disco">Alterações</button>
   <span class="grow"></span>
   <input id="q" type="search" placeholder="Buscar (Ctrl+F)">
   <button id="toggleReplace" title="Substituir em todo o journal">Substituir…</button>
@@ -300,6 +309,7 @@ $('save').onclick = save;
 $('revert').onclick = () => { if (!cur || !cur.doc || !cur.dirty) return; commit(); cur.doc = XJNL.parse(cur.src); changed(); setDirty(false); render(); };
 $('undo').onclick = () => step(undo, redo);
 $('redo').onclick = () => step(redo, undo);
+$('changes').onclick = showChanges;
 $('toggleReplace').onclick = () => { document.body.classList.toggle('replacing'); $('r').focus(); };
 addEventListener('keydown', e => {
   if (!(e.ctrlKey || e.metaKey)) return;
@@ -326,6 +336,27 @@ function render() {
     h('button', { textContent: 'Recolher tudo', onclick: () => openAll(false) }),
     h('span', { className: 'count', textContent: [`${n('task')} task${n('task') === 1 ? '' : 's'}`, loops && `${loops} loops`, conds && `${conds} if`, n('python') && `${n('python')} python`].filter(Boolean).join(' · ') }));
   $('journal').replaceChildren(bar, ...XJNL.blocks(root).map(c => block(c, root)));
+}
+
+// ---- changes against the file on disk, with 3 lines of context
+function showChanges() {
+  if (!cur || !cur.doc) return;
+  commit();
+  const ops = XJNL.diff(cur.src, XJNL.serialize(cur.doc)), keep = new Set();
+  ops.forEach((o, i) => { if (o.t !== ' ') for (let j = i - 3; j <= i + 3; j++) keep.add(j); });
+  const add = ops.filter(o => o.t === '+').length, del = ops.filter(o => o.t === '-').length, rows = [];
+  let gap = false;
+  ops.forEach((o, i) => {
+    if (!keep.has(i)) return void (gap = true);
+    if (gap) rows.push(h('div', { className: 'gap', textContent: '⋯' }));
+    gap = false;
+    rows.push(h('div', { className: 'dl ' + { '+': 'add', '-': 'del', ' ': '' }[o.t] },
+      h('span', { className: 'ln', textContent: o.a ?? '' }), h('span', { className: 'ln', textContent: o.b ?? '' }), h('span', { textContent: o.t + ' ' + o.s })));
+  });
+  $('journal').replaceChildren(
+    h('div', { className: 'bar' }, h('button', { textContent: '← Voltar ao journal', onclick: render }),
+      h('span', { className: 'count', textContent: add || del ? `+${add} −${del} linhas em relação ao arquivo no disco` : 'nenhuma alteração em relação ao arquivo no disco' })),
+    h('div', { className: 'diff mono' }, rows));
 }
 
 // expanding opens everything down to the parameter groups; collapsing folds the
